@@ -157,13 +157,22 @@ function main() {
       });
       return c.json({ ok: true });
     } catch (e) {
-      return c.json(
-        {
-          ok: false,
-          error: e instanceof Error ? e.message : "ingestion failed",
-        },
-        400
+      const errPayload =
+        e instanceof Error
+          ? { message: e.message, name: e.name, stack: e.stack }
+          : { raw: String(e) };
+      console.error(
+        JSON.stringify({
+          event: "ingestion_failed",
+          context: "getOrCreateAggregateRow/updateAggregateBlob",
+          controlId,
+          modelId,
+          startTimeMs,
+          endTimeMs,
+          err: errPayload,
+        })
       );
+      return c.json({ ok: false, error: "ingestion failed" }, 400);
     }
   });
 

@@ -28,7 +28,9 @@ export function quarterIndexAt(utcMs: number): number {
  */
 export function startOfQuarterMs(quarterIndex: number): number {
   const year = 1970 + Math.floor(quarterIndex / 4);
-  const quarterNumber = (quarterIndex % 4) + 1;
+  // Normalize modulo: JS % can be negative; we need quarter 1..4
+  const positiveRemainder = ((quarterIndex % 4) + 4) % 4;
+  const quarterNumber = positiveRemainder + 1;
   const month = (quarterNumber - 1) * 3; // 0-based for Date
   return Date.UTC(year, month, 1, 0, 0, 0, 0);
 }

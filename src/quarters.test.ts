@@ -38,6 +38,11 @@ describe("startOfQuarterMs", () => {
     const ms = startOfQuarterMs(225);
     expect(ms).toBe(Date.UTC(2026, 3, 1, 0, 0, 0, 0));
   });
+
+  test("negative quarterIndex -1 (1969 Q4) => 1969-10-01T00:00:00.000Z", () => {
+    const ms = startOfQuarterMs(-1);
+    expect(ms).toBe(Date.UTC(1969, 9, 1, 0, 0, 0, 0));
+  });
 });
 
 describe("splitByUtcQuarter golden (plan.md acceptance)", () => {
@@ -74,7 +79,7 @@ describe("splitByUtcQuarter three quarters", () => {
     const start = Date.UTC(2026, 2, 31, 23, 0, 0, 0); // end of Q1
     const end = Date.UTC(2026, 6, 1, 1, 0, 0, 0); // into Q3
     const slices = splitByUtcQuarter(start, end);
-    expect(slices.length).toBeGreaterThanOrEqual(2);
+    expect(slices.length).toBe(3);
     const sumMs = slices.reduce(
       (s, x) => s + (x.endTimeMs - x.startTimeMs),
       0
