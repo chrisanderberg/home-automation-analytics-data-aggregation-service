@@ -3,7 +3,14 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "start": "bun run src/server.ts"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "latest",
+    "hono": "latest",
+    "suncalc": "latest",
+    "zod": "latest"
   },
   "devDependencies": {
     "bun-types": "latest"
