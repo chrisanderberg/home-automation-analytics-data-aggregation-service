@@ -16,8 +16,8 @@ import {
   getBlobValue,
   setBlobValue,
 } from "./blob.js";
-import { holdIndex } from "./indices.js";
-import { splitByUtcQuarter } from "./quarters.js";
+import { holdIndex, transIndex } from "./indices.js";
+import { quarterIndexAt, splitByUtcQuarter } from "./quarters.js";
 
 const putControlBody = z.object({
   controlType: z.enum(["discrete", "slider"]),
@@ -182,15 +182,67 @@ function main() {
     if (!parsed.success) {
       return c.json({ ok: false, error: "validation failed" }, 400);
     }
-    const { fromState, toState } = parsed.data;
+    const { modelId, controlId, fromState, toState, timestampMs } = parsed.data;
     if (fromState === toState) {
       return c.json(
         { ok: false, error: "fromState must not equal toState" },
         400
       );
     }
-    // TODO: real ingestion (Milestone 6); return 501 until implemented
-    return c.json({ ok: false, error: "not implemented" }, 501);
+    const control = getControl(db, controlId);
+    if (!control) {
+      return c.json({ ok: false, error: "control missing" }, 400);
+    }
+    if (fromState >= control.numStates || toState >= control.numStates) {
+      return c.json({ ok: false, error: "state out of range" }, 400);
+    }
+    const numStates = control.numStates;
+    const quarterIndex = quarterIndexAt(timestampMs);
+    try {
+      await withImmediateTransaction(db, () => {
+        getOrCreateAggregateRow(
+          db,
+          controlId,
+          modelId,
+          quarterIndex,
+          numStates
+        );
+        updateAggregateBlob(
+          db,
+          controlId,
+          modelId,
+          quarterIndex,
+          numStates,
+          (dv) => {
+            const utcBucket = UtcClock.bucketAt(timestampMs);
+            const utcIdx = transIndex(fromState, toState, 0, utcBucket, numStates);
+            const utcPrev = getBlobValue(dv, utcIdx);
+            setBlobValue(dv, utcIdx, utcPrev + 1);
+            const localBucket = LocalClock.bucketAt(timestampMs, config.timeZone);
+            const localIdx = transIndex(fromState, toState, 1, localBucket, numStates);
+            const localPrev = getBlobValue(dv, localIdx);
+            setBlobValue(dv, localIdx, localPrev + 1);
+          }
+        );
+      });
+      return c.json({ ok: true });
+    } catch (e) {
+      const errPayload =
+        e instanceof Error
+          ? { message: e.message, name: e.name, stack: e.stack }
+          : { raw: String(e) };
+      console.error(
+        JSON.stringify({
+          event: "ingestion_failed",
+          context: "transition getOrCreateAggregateRow/updateAggregateBlob",
+          controlId,
+          modelId,
+          timestampMs,
+          err: errPayload,
+        })
+      );
+      return c.json({ ok: false, error: "ingestion failed" }, 400);
+    }
   });
 
   app.post("/admin/export-snapshot", async (c) => {
