@@ -16,11 +16,18 @@ export function getBlobValue(dv: DataView, index: number): number {
 
 /** Write value at slot index (64-bit LE). */
 export function setBlobValue(dv: DataView, index: number, value: number): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(
+      "setBlobValue: value must be a finite number >= 0, got " + value
+    );
+  }
   dv.setBigUint64(index * BLOB_VALUE_BYTES, BigInt(Math.floor(value)), true);
 }
 
 /**
  * Run fn inside BEGIN IMMEDIATE ... COMMIT. On throw, ROLLBACK and rethrow.
+ * If COMMIT throws, ROLLBACK is attempted (errors ignored) and the commit error is rethrown
+ * so the transaction is not left open.
  * Use for all aggregate blob updates so concurrent writers do not lose updates.
  */
 export async function withImmediateTransaction<T>(
@@ -30,7 +37,16 @@ export async function withImmediateTransaction<T>(
   db.run("BEGIN IMMEDIATE");
   try {
     const result = await fn();
-    db.run("COMMIT");
+    try {
+      db.run("COMMIT");
+    } catch (commitErr) {
+      try {
+        db.run("ROLLBACK");
+      } catch (_) {
+        /* ignore rollback error; caller sees commit failure */
+      }
+      throw commitErr;
+    }
     return result;
   } catch (e) {
     db.run("ROLLBACK");
