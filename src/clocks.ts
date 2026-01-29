@@ -40,25 +40,49 @@ function utcBucketStartMs(ms: number): number {
   return d.getTime();
 }
 
+/** UTC ms at end of 5-min bucket containing ms. */
+function utcBucketEndMs(ms: number): number {
+  return utcBucketStartMs(ms) + BUCKET_MS;
+}
+
+/**
+ * Split [startTimeMs, endTimeMs) into 5-min bucket slices using the given
+ * bucket index and bucket end calculators. Returns BucketSlice[] with
+ * sum(slice.endTimeMs - slice.startTimeMs) === endTimeMs - startTimeMs.
+ */
+function splitIntervalGeneric(
+  startTimeMs: number,
+  endTimeMs: number,
+  bucketAt: (ms: number) => number,
+  bucketEndMs: (ms: number) => number
+): BucketSlice[] {
+  const slices: BucketSlice[] = [];
+  let current = startTimeMs;
+  while (current < endTimeMs) {
+    const bucketIndex = bucketAt(current);
+    const bucketEnd = bucketEndMs(current);
+    const sliceEndMs = Math.min(endTimeMs, bucketEnd);
+    slices.push({
+      bucketIndex,
+      startTimeMs: current,
+      endTimeMs: sliceEndMs,
+    });
+    current = sliceEndMs;
+  }
+  return slices;
+}
+
 export const UtcClock = {
   bucketAt: utcBucketAt,
 
   /** Split [start,end) into 5-min bucket slices; sum(ms) === end - start. */
   splitInterval(startTimeMs: number, endTimeMs: number): BucketSlice[] {
-    const slices: BucketSlice[] = [];
-    let current = startTimeMs;
-    while (current < endTimeMs) {
-      const bucketIndex = utcBucketAt(current);
-      const bucketEndMs = utcBucketStartMs(current) + BUCKET_MS;
-      const sliceEndMs = Math.min(endTimeMs, bucketEndMs);
-      slices.push({
-        bucketIndex,
-        startTimeMs: current,
-        endTimeMs: sliceEndMs,
-      });
-      current = sliceEndMs;
-    }
-    return slices;
+    return splitIntervalGeneric(
+      startTimeMs,
+      endTimeMs,
+      utcBucketAt,
+      utcBucketEndMs
+    );
   },
 };
 
@@ -97,19 +121,11 @@ export const LocalClock = {
     endTimeMs: number,
     timeZone: string
   ): BucketSlice[] {
-    const slices: BucketSlice[] = [];
-    let current = startTimeMs;
-    while (current < endTimeMs) {
-      const bucketIndex = localBucketAt(current, timeZone);
-      const bucketEndMs = localBucketEndMs(current, timeZone);
-      const sliceEndMs = Math.min(endTimeMs, bucketEndMs);
-      slices.push({
-        bucketIndex,
-        startTimeMs: current,
-        endTimeMs: sliceEndMs,
-      });
-      current = sliceEndMs;
-    }
-    return slices;
+    return splitIntervalGeneric(
+      startTimeMs,
+      endTimeMs,
+      (ms) => localBucketAt(ms, timeZone),
+      (ms) => localBucketEndMs(ms, timeZone)
+    );
   },
 };

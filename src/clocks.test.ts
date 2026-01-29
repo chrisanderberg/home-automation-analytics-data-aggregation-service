@@ -85,7 +85,7 @@ describe("Local (America/Los_Angeles) DST invariant tests", () => {
   });
 
   test("sum(ms) equals elapsed for interval crossing DST (spring forward)", () => {
-    const start = Date.UTC(2026, 2, 8, 15, 0, 0, 0);
+    const start = Date.UTC(2026, 2, 8, 9, 0, 0, 0);
     const end = start + 4 * 60 * 60 * 1000;
     const slices = LocalClock.splitInterval(start, end, LA);
     const sumMs = slices.reduce((s, x) => s + (x.endTimeMs - x.startTimeMs), 0);
@@ -93,7 +93,7 @@ describe("Local (America/Los_Angeles) DST invariant tests", () => {
   });
 
   test("sum(ms) equals elapsed for interval crossing DST (fall back)", () => {
-    const start = Date.UTC(2026, 10, 1, 14, 0, 0, 0);
+    const start = Date.UTC(2026, 10, 1, 8, 0, 0, 0);
     const end = start + 4 * 60 * 60 * 1000;
     const slices = LocalClock.splitInterval(start, end, LA);
     const sumMs = slices.reduce((s, x) => s + (x.endTimeMs - x.startTimeMs), 0);
