@@ -413,6 +413,11 @@ Total number of stored values:
 - transition groups: N × (N-1) × G
 - total: (N + N(N-1)) × G = N^2 × G
 
+All stored values are unsigned integers (holding times in milliseconds;
+transition counts). The exact binary encoding (bit width, byte order) is an
+implementation detail—each implementation uses its native unsigned integer
+representation for the runtime and storage it targets.
+
 ### Canonical index math (zero-based)
 
 Constants:

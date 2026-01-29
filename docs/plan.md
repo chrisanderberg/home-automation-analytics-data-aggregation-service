@@ -77,9 +77,14 @@ Canonical indices (zero-based):
   - `offsetWithinFromBlock(from,to) = (to < from) ? to : (to - 1)`
 
 ### Blob numeric encoding (service decision)
-- Store all values as **u64** in **little-endian** inside SQLite BLOB.
-  - holding times: elapsed milliseconds (u64)
-  - transition counts: increment-by-one counts (u64)
+- All values are **unsigned integers** (holding times: elapsed milliseconds;
+  transition counts: increment-by-one counts).
+- Use each system’s native representation:
+  - **JavaScript**: native `number` for in-memory values.
+  - **SQLite BLOB**: store values using the storage/driver’s native integer
+    representation (e.g. 64-bit integer if that is the convention for the
+    SQLite driver in use). No need to mandate a specific bit width or byte
+    order; follow what is natural for the stack.
 
 ### Data integrity posture (`spec.md`)
 If integrity fails, **discard** the affected data (HTTP 400 + log reason).
@@ -92,7 +97,9 @@ clock only when that clock’s time mapping is undefined per `spec.md`.
 
 - Runtime: Bun
 - Web: Hono
-- DB: SQLite (Bun native driver via `bun:sqlite`)
+- DB: SQLite via `node:sqlite` (Bun Node compatibility), so the online backup API
+  is available. Use **exactly one** SQLite connection for all writes and for
+  export; this allows consistent snapshots while ingesting.
 - Validation: Zod
 - Time zones/DST/calendar: `@js-temporal/polyfill`
   - used to compute Local time in a **configurable IANA timezone**, deterministically
@@ -200,7 +207,7 @@ Response:
 Implement dense index math once, with strong tests.
 
 **Deliverables**
-- `layout/constants.ts`, `layout/indices.ts`
+- `src/constants.ts`, `src/indices.ts`
 - Tests:
   - blob length = `N^2 * G`
   - holding region = `[0, N*G)`
@@ -441,14 +448,19 @@ assumptions and keep knobs configurable if needed.
 **Goal**
 Create consistent SQLite snapshot files for offline analysis.
 
+**Strategy**
+- **Primary**: Use `node:sqlite` online backup: `backup(sourceDb, snapshotPath, { rate, progress })` (wraps SQLite `sqlite3_backup_*` APIs). Ingestion continues; writes are serialized through the single connection. Return success after the promise resolves.
+- **Error handling**: If backup fails or restarts too often (e.g. unexpected multi-connection usage), log and return an error; do not silently produce partial copies.
+- **Fallback** (only if `node:sqlite` is problematic in the setup): `VACUUM INTO 'path'` or briefly block writes and copy the file (least preferred).
+
 **Deliverables**
-- `POST /admin/export-snapshot` writes `exports/snapshot-YYYYMMDD-HHMMSS.sqlite`
-- Prefer SQLite online backup API if exposed; otherwise implement a safe fallback
-- Document manual copy workflow (scp/copy) in an exports doc (filename TBD)
+- `POST /admin/export-snapshot` writes `exports/snapshot-YYYYMMDD-HHMMSS.sqlite` using `node:sqlite`’s `backup()`.
+- Service uses exactly one SQLite connection (all ingestion and export go through it).
+- Document manual copy workflow (scp/copy) in an exports doc (filename TBD).
 
 **Acceptance criteria**
-- Snapshot file can be opened while service continues ingesting
-- Snapshot is consistent (no partial writes)
+- Snapshot file can be opened while service continues ingesting.
+- Snapshot is consistent (no partial writes).
 
 ---
 
