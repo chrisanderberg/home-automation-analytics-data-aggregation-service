@@ -1,27 +1,78 @@
 /**
  * Transactional blob read-modify-write for aggregate updates.
- * TODO: withImmediateTransaction(fn) — BEGIN IMMEDIATE, run fn, COMMIT/ROLLBACK (Milestone 2).
- * TODO: updateAggregateBlob() — used only inside a transaction (Milestone 2).
+ * Blob encoding: 64-bit little-endian unsigned integer per value (same as
+ * blobLength(numStates) values; indices from indices.ts).
  */
 
 import type { Database } from "bun:sqlite";
+import { blobLength } from "./constants.js";
+import { BLOB_VALUE_BYTES } from "./db.js";
 
-export async function withImmediateTransaction<T>(
-  _db: Database,
-  _fn: () => T | Promise<T>
-): Promise<T> {
-  // TODO: BEGIN IMMEDIATE; run fn; COMMIT or ROLLBACK; Milestone 2
-  throw new Error("withImmediateTransaction not implemented");
+/** Read value at slot index (64-bit LE). Values fit in number for holding ms and counts. */
+export function getBlobValue(dv: DataView, index: number): number {
+  const n = dv.getBigUint64(index * BLOB_VALUE_BYTES, true);
+  return Number(n);
 }
 
+/** Write value at slot index (64-bit LE). */
+export function setBlobValue(dv: DataView, index: number, value: number): void {
+  dv.setBigUint64(index * BLOB_VALUE_BYTES, BigInt(Math.floor(value)), true);
+}
+
+/**
+ * Run fn inside BEGIN IMMEDIATE ... COMMIT. On throw, ROLLBACK and rethrow.
+ * Use for all aggregate blob updates so concurrent writers do not lose updates.
+ */
+export async function withImmediateTransaction<T>(
+  db: Database,
+  fn: () => T | Promise<T>
+): Promise<T> {
+  db.run("BEGIN IMMEDIATE");
+  try {
+    const result = await fn();
+    db.run("COMMIT");
+    return result;
+  } catch (e) {
+    db.run("ROLLBACK");
+    throw e;
+  }
+}
+
+/**
+ * Read aggregate blob, run updater(DataView), write back. Must only be called
+ * inside an active transaction (e.g. inside withImmediateTransaction callback).
+ * Blob has blobLength(numStates) slots; use getBlobValue/setBlobValue on the
+ * DataView to read/write by slot index (holdIndex, transIndex from indices.ts).
+ */
 export function updateAggregateBlob(
-  _db: Database,
-  _controlId: string,
-  _modelId: string,
-  _quarterIndex: number,
-  _numStates: number,
-  _updater: (buffer: ArrayBuffer) => void
+  db: Database,
+  controlId: string,
+  modelId: string,
+  quarterIndex: number,
+  numStates: number,
+  updater: (dv: DataView) => void
 ): void {
-  // TODO: read blob, run updater on buffer, write back; only inside transaction (Milestone 2)
-  throw new Error("updateAggregateBlob not implemented");
+  const row = db
+    .query(
+      "SELECT blob FROM aggregates WHERE control_id = ? AND model_id = ? AND quarter_index = ?"
+    )
+    .get(controlId, modelId, quarterIndex) as { blob: Uint8Array } | undefined;
+  if (!row) {
+    throw new Error("aggregate row missing; call getOrCreateAggregateRow first");
+  }
+  const expectedBytes = blobLength(numStates) * BLOB_VALUE_BYTES;
+  if (row.blob.length !== expectedBytes) {
+    throw new Error("aggregate blob length mismatch");
+  }
+  const buf = row.blob.buffer.slice(
+    row.blob.byteOffset,
+    row.blob.byteOffset + row.blob.byteLength
+  );
+  const dv = new DataView(buf);
+  updater(dv);
+  const updated = new Uint8Array(buf);
+  db.run(
+    "UPDATE aggregates SET blob = ? WHERE control_id = ? AND model_id = ? AND quarter_index = ?",
+    [updated, controlId, modelId, quarterIndex]
+  );
 }
