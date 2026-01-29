@@ -41,6 +41,13 @@ const postTransitionBody = z.object({
   timestampMs: z.number().int(),
 });
 
+/** Treat as client error if statusCode === 400 or isClientError === true (e.g. validation). */
+function isClientError(e: unknown): boolean {
+  if (e === null || typeof e !== "object") return false;
+  const o = e as { statusCode?: number; isClientError?: boolean };
+  return o.statusCode === 400 || o.isClientError === true;
+}
+
 function main() {
   let config;
   try {
@@ -161,6 +168,7 @@ function main() {
         e instanceof Error
           ? { message: e.message, name: e.name, stack: e.stack }
           : { raw: String(e) };
+      const status = isClientError(e) ? 400 : 500;
       console.error(
         JSON.stringify({
           event: "ingestion_failed",
@@ -172,7 +180,7 @@ function main() {
           err: errPayload,
         })
       );
-      return c.json({ ok: false, error: "ingestion failed" }, 400);
+      return c.json({ ok: false, error: "ingestion failed" }, status);
     }
   });
 
@@ -231,6 +239,7 @@ function main() {
         e instanceof Error
           ? { message: e.message, name: e.name, stack: e.stack }
           : { raw: String(e) };
+      const status = isClientError(e) ? 400 : 500;
       console.error(
         JSON.stringify({
           event: "ingestion_failed",
@@ -241,7 +250,7 @@ function main() {
           err: errPayload,
         })
       );
-      return c.json({ ok: false, error: "ingestion failed" }, 400);
+      return c.json({ ok: false, error: "ingestion failed" }, status);
     }
   });
 
