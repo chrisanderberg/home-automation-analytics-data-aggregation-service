@@ -54,5 +54,5 @@ export async function exportSnapshot(
     throw err;
   }
 
-  return `${exportsDir}/${filename}`;
+  return filePath;
 }
