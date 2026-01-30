@@ -140,7 +140,10 @@ curl -sS -X POST http://localhost:8787/ingest/transition \
 
 ### `POST /admin/export-snapshot`
 
-Produce a consistent SQLite snapshot for offline analysis.
+Produce a consistent SQLite snapshot for offline analysis. Snapshots are written
+to `EXPORTS_DIR` (default `exports/`). The intended workflow is manual copy of
+the snapshot file (e.g. `scp` or `cp`) to the analysis machine; the service
+does not provide network transfer or auth for exports.
 
 Example:
 

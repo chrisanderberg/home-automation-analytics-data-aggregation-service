@@ -1,7 +1,7 @@
 /**
  * Consistent SQLite snapshot export for offline analysis.
- * TODO: implement using node:sqlite backup() — write exports/snapshot-YYYYMMDD-HHMMSS.sqlite
- * (Milestone 8). Service uses exactly one SQLite connection; backup while ingesting.
+ * Uses the same DB connection as ingestion; the snapshot is consistent at
+ * serialize time (bun:sqlite Database.serialize() → write to exports dir).
  */
 
 import type { Database } from "bun:sqlite";
@@ -9,10 +9,9 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 export async function exportSnapshot(
-  _db: Database,
+  db: Database,
   exportsDir: string
 ): Promise<string> {
-  // TODO: use node:sqlite backup() for consistent snapshot (Milestone 8)
   const now = new Date();
   const y = now.getUTCFullYear();
   const m = String(now.getUTCMonth() + 1).padStart(2, "0");
@@ -22,8 +21,38 @@ export async function exportSnapshot(
   const s = String(now.getUTCSeconds()).padStart(2, "0");
   const filename = `snapshot-${y}${m}${d}-${h}${min}${s}.sqlite`;
   const filePath = join(exportsDir, filename);
+
+  let serialized: Uint8Array;
+  try {
+    serialized = db.serialize();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      JSON.stringify({
+        event: "export_snapshot_failed",
+        reason: "serialize failed",
+        error: message,
+      })
+    );
+    throw err;
+  }
+
   await mkdir(exportsDir, { recursive: true });
-  // Stub: create empty file so path exists; real backup in M8
-  await Bun.write(filePath, "");
+
+  try {
+    await Bun.write(filePath, serialized);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      JSON.stringify({
+        event: "export_snapshot_failed",
+        reason: "write failed",
+        path: filePath,
+        error: message,
+      })
+    );
+    throw err;
+  }
+
   return `${exportsDir}/${filename}`;
 }

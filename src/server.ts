@@ -254,8 +254,16 @@ function main() {
     try {
       const path = await exportSnapshot(db, config.exportsDir);
       return c.json({ ok: true, path });
-    } catch {
-      return c.json({ ok: false, error: "not implemented" }, 501);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(
+        JSON.stringify({
+          event: "export_snapshot_failed",
+          reason: "route handler",
+          error: message,
+        })
+      );
+      return c.json({ ok: false, error: "export failed" }, 500);
     }
   });
 
