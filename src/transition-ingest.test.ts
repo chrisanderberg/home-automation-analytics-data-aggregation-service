@@ -62,6 +62,7 @@ describe("transition ingestion E2E: UTC and Local transIndex increments", () => 
             const utcPrev = getBlobValue(dv, utcIdx);
             setBlobValue(dv, utcIdx, utcPrev + 1);
             const localBucket = LocalClock.bucketAt(TRANSITION_TS, CTX);
+            expect(localBucket).toBeDefined();
             const localIdx = transIndex(fromState, toState, 1, localBucket!, numStates);
             const localPrev = getBlobValue(dv, localIdx);
             setBlobValue(dv, localIdx, localPrev + 1);

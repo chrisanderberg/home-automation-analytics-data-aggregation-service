@@ -267,8 +267,8 @@ function apparentSolarBucketEndMs(
 
 /** Apparent solar clock: requires lat/lon in context; always defined. */
 export const ApparentSolarClock: Clock = {
-  bucketAt(ms: number, ctx?: ClockContext): number {
-    if (ctx === undefined) return 0;
+  bucketAt(ms: number, ctx?: ClockContext): number | undefined {
+    if (ctx === undefined) return undefined;
     return apparentSolarBucketAt(ms, ctx.latitudeDeg, ctx.longitudeDeg);
   },
   splitInterval(
@@ -276,7 +276,7 @@ export const ApparentSolarClock: Clock = {
     endTimeMs: number,
     ctx?: ClockContext
   ): BucketSlice[] | undefined {
-    if (ctx === undefined) return [];
+    if (ctx === undefined) return undefined;
     const lat = ctx.latitudeDeg;
     const lon = ctx.longitudeDeg;
     return splitIntervalGeneric(
@@ -321,7 +321,7 @@ function unequalHoursBucketAt(
   let unequalBucketInDay: number;
   if (ms >= riseMs && ms < setMs) {
     const frac = (ms - riseMs) / dayLengthMs;
-    unequalBucketInDay = Math.min(Math.floor(frac * 288), 287);
+    unequalBucketInDay = Math.min(Math.floor(frac * 144), 143);
   } else {
     let msInNight: number;
     if (ms >= setMs) {
@@ -352,26 +352,24 @@ function unequalHoursBucketEndMs(
   const dayLengthMs = setMs - riseMs;
   const nightLengthMs = DAY_MS - dayLengthMs;
   if (nightLengthMs <= 0 || dayLengthMs <= 0) return undefined;
-  const dayHourMs = dayLengthMs / 12;
-  const nightHourMs = nightLengthMs / 12;
 
   if (ms >= riseMs && ms < setMs) {
     const msSinceRise = ms - riseMs;
-    const dayBucket = Math.floor(msSinceRise / (dayHourMs / 288));
-    const nextBucketStart = riseMs + (dayBucket + 1) * (dayHourMs / 288);
+    const dayBucket = Math.floor(msSinceRise / (dayLengthMs / 144));
+    const nextBucketStart = riseMs + (dayBucket + 1) * (dayLengthMs / 144);
     return Math.min(nextBucketStart, setMs);
   }
   if (ms >= setMs) {
     const msSinceSet = ms - setMs;
-    const nightBucket = Math.floor(msSinceSet / (nightHourMs / 288));
-    const nextBucketStart = setMs + (nightBucket + 1) * (nightHourMs / 288);
+    const nightBucket = Math.floor(msSinceSet / (nightLengthMs / 144));
+    const nextBucketStart = setMs + (nightBucket + 1) * (nightLengthMs / 144);
     const nightEndMs = riseMs + DAY_MS;
     return Math.min(nextBucketStart, nightEndMs);
   }
   const msSincePrevMidnight = ms - (setMs - DAY_MS);
-  const nightBucket = Math.floor(msSincePrevMidnight / (nightHourMs / 288));
+  const nightBucket = Math.floor(msSincePrevMidnight / (nightLengthMs / 144));
   const nextBucketStart =
-    setMs - DAY_MS + (nightBucket + 1) * (nightHourMs / 288);
+    setMs - DAY_MS + (nightBucket + 1) * (nightLengthMs / 144);
   return Math.min(nextBucketStart, riseMs);
 }
 
@@ -416,7 +414,7 @@ export interface ClockConfig {
 }
 
 /** Returns all five clocks in canonical order: UTC, Local, Mean solar, Apparent solar, Unequal hours. */
-export function createClocks(_config: ClockConfig): Clock[] {
+export function createClocks(): Clock[] {
   return [
     UtcClock,
     LocalClock,

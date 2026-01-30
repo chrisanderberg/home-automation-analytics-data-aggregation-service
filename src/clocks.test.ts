@@ -117,7 +117,7 @@ describe("Local (America/Los_Angeles) DST invariant tests", () => {
 
 describe("Five clocks (mid-latitude): all defined, conservation", () => {
   test("createClocks returns five clocks in canonical order", () => {
-    const clocks = createClocks(LA_CTX);
+    const clocks = createClocks();
     expect(clocks).toHaveLength(5);
   });
 

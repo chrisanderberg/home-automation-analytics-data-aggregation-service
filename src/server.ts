@@ -60,7 +60,7 @@ function main() {
   const db = openDb(config.sqlitePath);
   applySchema(db);
 
-  const clocks = createClocks(config);
+  const clocks = createClocks();
   const clockCtx = {
     timeZone: config.timeZone,
     latitudeDeg: config.latitudeDeg,
@@ -138,15 +138,15 @@ function main() {
             slice.quarterIndex,
             numStates,
             (dv) => {
-              for (let c = 0; c < clocks.length; c++) {
-                const clockSlices = clocks[c].splitInterval(
+              for (let clockIdx = 0; clockIdx < clocks.length; clockIdx++) {
+                const clockSlices = clocks[clockIdx].splitInterval(
                   slice.startTimeMs,
                   slice.endTimeMs,
                   clockCtx
                 );
                 if (clockSlices === undefined) continue;
                 for (const bs of clockSlices) {
-                  const idx = holdIndex(state, c, bs.bucketIndex);
+                  const idx = holdIndex(state, clockIdx, bs.bucketIndex);
                   const prev = getBlobValue(dv, idx);
                   setBlobValue(
                     dv,
@@ -219,10 +219,10 @@ function main() {
           quarterIndex,
           numStates,
           (dv) => {
-            for (let c = 0; c < clocks.length; c++) {
-              const bucket = clocks[c].bucketAt(timestampMs, clockCtx);
+            for (let ci = 0; ci < clocks.length; ci++) {
+              const bucket = clocks[ci].bucketAt(timestampMs, clockCtx);
               if (bucket === undefined) continue;
-              const idx = transIndex(fromState, toState, c, bucket, numStates);
+              const idx = transIndex(fromState, toState, ci, bucket, numStates);
               const prev = getBlobValue(dv, idx);
               setBlobValue(dv, idx, prev + 1);
             }
