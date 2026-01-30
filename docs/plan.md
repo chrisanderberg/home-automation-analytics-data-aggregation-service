@@ -97,9 +97,10 @@ clock only when that clock’s time mapping is undefined per `spec.md`.
 
 - Runtime: Bun
 - Web: Hono
-- DB: SQLite via `node:sqlite` (Bun Node compatibility), so the online backup API
-  is available. Use **exactly one** SQLite connection for all writes and for
-  export; this allows consistent snapshots while ingesting.
+- DB: SQLite via **bun:sqlite** (Bun native driver). Use **exactly one** SQLite
+  connection for all writes and for export. Export is implemented by serializing
+  the database to memory and writing to a file, producing a consistent snapshot
+  at write time.
 - Validation: Zod
 - Time zones/DST/calendar: `@js-temporal/polyfill`
   - used to compute Local time in a **configurable IANA timezone**, deterministically
@@ -448,15 +449,20 @@ assumptions and keep knobs configurable if needed.
 **Goal**
 Create consistent SQLite snapshot files for offline analysis.
 
-**Strategy**
-- **Primary**: Use `node:sqlite` online backup: `backup(sourceDb, snapshotPath, { rate, progress })` (wraps SQLite `sqlite3_backup_*` APIs). Ingestion continues; writes are serialized through the single connection. Return success after the promise resolves.
-- **Error handling**: If backup fails or restarts too often (e.g. unexpected multi-connection usage), log and return an error; do not silently produce partial copies.
-- **Fallback** (only if `node:sqlite` is problematic in the setup): `VACUUM INTO 'path'` or briefly block writes and copy the file (least preferred).
+**Strategy (implementation)**
+- Use **bun:sqlite**: the service uses a single SQLite connection for all
+  ingestion and export. Export is implemented by calling `db.serialize()` to
+  produce a full copy of the database in memory, then writing that to
+  `exports/snapshot-YYYYMMDD-HHMMSS.sqlite`. The snapshot is consistent at write
+  time. If serialize or write fails, log and return an error; do not silently
+  produce partial copies.
 
 **Deliverables**
-- `POST /admin/export-snapshot` writes `exports/snapshot-YYYYMMDD-HHMMSS.sqlite` using `node:sqlite`’s `backup()`.
-- Service uses exactly one SQLite connection (all ingestion and export go through it).
-- Document manual copy workflow (scp/copy) in an exports doc (filename TBD).
+- `POST /admin/export-snapshot` writes `exports/snapshot-YYYYMMDD-HHMMSS.sqlite`
+  using bun:sqlite’s `serialize()` and then writing the result to the exports directory.
+- Service uses exactly one SQLite connection (all ingestion and export go
+  through it).
+- Manual copy workflow (scp/copy) is documented in the README.
 
 **Acceptance criteria**
 - Snapshot file can be opened while service continues ingesting.
