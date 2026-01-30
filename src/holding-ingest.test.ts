@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { UtcClock, LocalClock } from "./clocks.js";
+import { UtcClock, LocalClock, type ClockContext } from "./clocks.js";
 import {
   withImmediateTransaction,
   updateAggregateBlob,
@@ -16,7 +16,11 @@ import {
 import { holdIndex } from "./indices.js";
 import { splitByUtcQuarter } from "./quarters.js";
 
-const TIME_ZONE = "America/Los_Angeles";
+const CTX: ClockContext = {
+  timeZone: "America/Los_Angeles",
+  latitudeDeg: 37.77,
+  longitudeDeg: -122.42,
+};
 
 /** 2026-03-31T23:59:00.000Z (Q1 2026, 1 min before Q2). */
 const Q1_END_MINUS_1MIN = Date.UTC(2026, 2, 31, 23, 59, 0, 0);
@@ -63,7 +67,7 @@ describe("holding ingestion E2E: cross-quarter interval updates two aggregate ro
                 slice.startTimeMs,
                 slice.endTimeMs
               );
-              for (const bs of utcSlices) {
+              for (const bs of utcSlices ?? []) {
                 const idx = holdIndex(state, 0, bs.bucketIndex);
                 const prev = getBlobValue(dv, idx);
                 setBlobValue(dv, idx, prev + (bs.endTimeMs - bs.startTimeMs));
@@ -71,9 +75,9 @@ describe("holding ingestion E2E: cross-quarter interval updates two aggregate ro
               const localSlices = LocalClock.splitInterval(
                 slice.startTimeMs,
                 slice.endTimeMs,
-                TIME_ZONE
+                CTX
               );
-              for (const bs of localSlices) {
+              for (const bs of localSlices ?? []) {
                 const idx = holdIndex(state, 1, bs.bucketIndex);
                 const prev = getBlobValue(dv, idx);
                 setBlobValue(dv, idx, prev + (bs.endTimeMs - bs.startTimeMs));
@@ -95,7 +99,8 @@ describe("holding ingestion E2E: cross-quarter interval updates two aggregate ro
       );
       const q1Dv = new DataView(q1Buf);
       const q1Bucket = UtcClock.bucketAt(Q1_END_MINUS_1MIN);
-      expect(getBlobValue(q1Dv, holdIndex(state, 0, q1Bucket))).toBe(60_000);
+      expect(q1Bucket).toBeDefined();
+      expect(getBlobValue(q1Dv, holdIndex(state, 0, q1Bucket!))).toBe(60_000);
 
       const q2Row = db
         .query(
@@ -109,7 +114,8 @@ describe("holding ingestion E2E: cross-quarter interval updates two aggregate ro
       );
       const q2Dv = new DataView(q2Buf);
       const q2Bucket = UtcClock.bucketAt(Date.UTC(2026, 3, 1, 0, 0, 0, 0));
-      expect(getBlobValue(q2Dv, holdIndex(state, 0, q2Bucket))).toBe(60_000);
+      expect(q2Bucket).toBeDefined();
+      expect(getBlobValue(q2Dv, holdIndex(state, 0, q2Bucket!))).toBe(60_000);
     } finally {
       db.close();
     }

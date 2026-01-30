@@ -103,6 +103,16 @@ From `docs/spec.md` and `docs/plan.md`:
   approved.
 - Prefer small, auditable libraries. Keep the dependency surface minimal.
 
+## TypeScript and linting
+
+- **Always** check for TypeScript and lint errors after proposing code changes.
+- After editing files, run the project linter (or read linter diagnostics) on the
+  files you changed; fix any reported errors before considering the change done.
+- Prefer resolving type errors properly (e.g. narrowing, `?? []`, or explicit
+  checks) over broad assertions; use non-null assertions (`!`) only where the
+  value is guaranteed by invariants (e.g. UTC clock always returns a number).
+- Do not leave new type errors or lint issues in the codebase.
+
 ## Commands (typical)
 
 Use these commands when relevant to verify milestones:
@@ -124,3 +134,4 @@ When responding with an implementation:
 - provide commands to run to verify
 - note any assumptions/TBDs surfaced (do not silently decide them)
 - confirm conformance with `docs/spec.md` invariants
+- confirm that TypeScript and lint checks pass on changed files (see above)

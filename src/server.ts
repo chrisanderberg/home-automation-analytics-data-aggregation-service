@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { UtcClock, LocalClock } from "./clocks.js";
+import { createClocks } from "./clocks.js";
 import { loadConfig } from "./config.js";
 import {
   openDb,
@@ -59,6 +59,13 @@ function main() {
 
   const db = openDb(config.sqlitePath);
   applySchema(db);
+
+  const clocks = createClocks(config);
+  const clockCtx = {
+    timeZone: config.timeZone,
+    latitudeDeg: config.latitudeDeg,
+    longitudeDeg: config.longitudeDeg,
+  };
 
   const app = new Hono();
 
@@ -131,32 +138,22 @@ function main() {
             slice.quarterIndex,
             numStates,
             (dv) => {
-              const utcSlices = UtcClock.splitInterval(
-                slice.startTimeMs,
-                slice.endTimeMs
-              );
-              for (const bs of utcSlices) {
-                const idx = holdIndex(state, 0, bs.bucketIndex);
-                const prev = getBlobValue(dv, idx);
-                setBlobValue(
-                  dv,
-                  idx,
-                  prev + (bs.endTimeMs - bs.startTimeMs)
+              for (let c = 0; c < clocks.length; c++) {
+                const clockSlices = clocks[c].splitInterval(
+                  slice.startTimeMs,
+                  slice.endTimeMs,
+                  clockCtx
                 );
-              }
-              const localSlices = LocalClock.splitInterval(
-                slice.startTimeMs,
-                slice.endTimeMs,
-                config.timeZone
-              );
-              for (const bs of localSlices) {
-                const idx = holdIndex(state, 1, bs.bucketIndex);
-                const prev = getBlobValue(dv, idx);
-                setBlobValue(
-                  dv,
-                  idx,
-                  prev + (bs.endTimeMs - bs.startTimeMs)
-                );
+                if (clockSlices === undefined) continue;
+                for (const bs of clockSlices) {
+                  const idx = holdIndex(state, c, bs.bucketIndex);
+                  const prev = getBlobValue(dv, idx);
+                  setBlobValue(
+                    dv,
+                    idx,
+                    prev + (bs.endTimeMs - bs.startTimeMs)
+                  );
+                }
               }
             }
           );
@@ -222,14 +219,13 @@ function main() {
           quarterIndex,
           numStates,
           (dv) => {
-            const utcBucket = UtcClock.bucketAt(timestampMs);
-            const utcIdx = transIndex(fromState, toState, 0, utcBucket, numStates);
-            const utcPrev = getBlobValue(dv, utcIdx);
-            setBlobValue(dv, utcIdx, utcPrev + 1);
-            const localBucket = LocalClock.bucketAt(timestampMs, config.timeZone);
-            const localIdx = transIndex(fromState, toState, 1, localBucket, numStates);
-            const localPrev = getBlobValue(dv, localIdx);
-            setBlobValue(dv, localIdx, localPrev + 1);
+            for (let c = 0; c < clocks.length; c++) {
+              const bucket = clocks[c].bucketAt(timestampMs, clockCtx);
+              if (bucket === undefined) continue;
+              const idx = transIndex(fromState, toState, c, bucket, numStates);
+              const prev = getBlobValue(dv, idx);
+              setBlobValue(dv, idx, prev + 1);
+            }
           }
         );
       });
