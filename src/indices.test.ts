@@ -82,3 +82,28 @@ describe("transition groups cover all from != to exactly once", () => {
     expect(g10).toBeLessThan(2);
   });
 });
+
+describe("dense index math goldens (deterministic, N=2 and N=6)", () => {
+  test("holdIndex goldens: first cell 0, state 2 clock 0 bucket 0 = 20160, bucket 726 = 726", () => {
+    expect(holdIndex(0, 0, 0)).toBe(0);
+    expect(holdIndex(2, 0, 0)).toBe(2 * G);
+    expect(holdIndex(0, 0, 726)).toBe(726);
+  });
+
+  test("holdIndex N=6: last holding cell (5,4,2015) = N*G - 1", () => {
+    const N = 6;
+    expect(holdIndex(5, 4, 2015)).toBe(N * G - 1);
+  });
+
+  test("transIndex N=6: first transition (0,1,0,0) = N*G; (5,2,0,0) = N*G + 27*G (plan golden)", () => {
+    const N = 6;
+    expect(transIndex(0, 1, 0, 0, N)).toBe(N * G);
+    expect(transIndex(5, 2, 0, 0, N)).toBe(N * G + 27 * G);
+  });
+
+  test("transIndex N=6: (5,2,0,726) = trans group (5,2) + bucket 726 (bucket golden)", () => {
+    const N = 6;
+    const base = N * G + 27 * G;
+    expect(transIndex(5, 2, 0, 726, N)).toBe(base + 726);
+  });
+});

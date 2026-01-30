@@ -83,16 +83,40 @@ function main() {
     const raw = await c.req.json().catch(() => ({}));
     const parsed = putControlBody.safeParse(raw);
     if (!parsed.success) {
+      console.error(
+        JSON.stringify({
+          event: "control_discarded",
+          reason: "validation failed",
+          controlId,
+        })
+      );
       return c.json({ ok: false, error: "validation failed" }, 400);
     }
     const { controlType, numStates, stateLabels } = parsed.data;
     if (controlType === "slider" && numStates !== 6) {
+      console.error(
+        JSON.stringify({
+          event: "control_discarded",
+          reason: "slider requires numStates === 6",
+          controlId,
+          numStates,
+        })
+      );
       return c.json(
         { ok: false, error: "slider requires numStates === 6" },
         400
       );
     }
     if (stateLabels !== undefined && stateLabels.length !== numStates) {
+      console.error(
+        JSON.stringify({
+          event: "control_discarded",
+          reason: "stateLabels length must equal numStates",
+          controlId,
+          numStates,
+          stateLabelsLength: stateLabels.length,
+        })
+      );
       return c.json(
         { ok: false, error: "stateLabels length must equal numStates" },
         400
@@ -106,17 +130,57 @@ function main() {
     const raw = await c.req.json().catch(() => ({}));
     const parsed = postHoldingBody.safeParse(raw);
     if (!parsed.success) {
+      console.error(
+        JSON.stringify({
+          event: "ingest_discarded",
+          type: "holding",
+          reason: "validation failed",
+          controlId: (raw as { controlId?: string }).controlId,
+          modelId: (raw as { modelId?: string }).modelId,
+        })
+      );
       return c.json({ ok: false, error: "validation failed" }, 400);
     }
     const { modelId, controlId, state, startTimeMs, endTimeMs } = parsed.data;
     if (endTimeMs <= startTimeMs) {
+      console.error(
+        JSON.stringify({
+          event: "ingest_discarded",
+          type: "holding",
+          reason: "endTimeMs must be > startTimeMs",
+          controlId,
+          modelId,
+          startTimeMs,
+          endTimeMs,
+        })
+      );
       return c.json({ ok: false, error: "endTimeMs must be > startTimeMs" }, 400);
     }
     const control = getControl(db, controlId);
     if (!control) {
+      console.error(
+        JSON.stringify({
+          event: "ingest_discarded",
+          type: "holding",
+          reason: "control missing",
+          controlId,
+          modelId,
+        })
+      );
       return c.json({ ok: false, error: "control missing" }, 400);
     }
     if (state >= control.numStates) {
+      console.error(
+        JSON.stringify({
+          event: "ingest_discarded",
+          type: "holding",
+          reason: "state out of range",
+          controlId,
+          modelId,
+          state,
+          numStates: control.numStates,
+        })
+      );
       return c.json({ ok: false, error: "state out of range" }, 400);
     }
     const numStates = control.numStates;
@@ -185,10 +249,30 @@ function main() {
     const raw = await c.req.json().catch(() => ({}));
     const parsed = postTransitionBody.safeParse(raw);
     if (!parsed.success) {
+      console.error(
+        JSON.stringify({
+          event: "ingest_discarded",
+          type: "transition",
+          reason: "validation failed",
+          controlId: (raw as { controlId?: string }).controlId,
+          modelId: (raw as { modelId?: string }).modelId,
+        })
+      );
       return c.json({ ok: false, error: "validation failed" }, 400);
     }
     const { modelId, controlId, fromState, toState, timestampMs } = parsed.data;
     if (fromState === toState) {
+      console.error(
+        JSON.stringify({
+          event: "ingest_discarded",
+          type: "transition",
+          reason: "fromState must not equal toState",
+          controlId,
+          modelId,
+          fromState,
+          toState,
+        })
+      );
       return c.json(
         { ok: false, error: "fromState must not equal toState" },
         400
@@ -196,9 +280,30 @@ function main() {
     }
     const control = getControl(db, controlId);
     if (!control) {
+      console.error(
+        JSON.stringify({
+          event: "ingest_discarded",
+          type: "transition",
+          reason: "control missing",
+          controlId,
+          modelId,
+        })
+      );
       return c.json({ ok: false, error: "control missing" }, 400);
     }
     if (fromState >= control.numStates || toState >= control.numStates) {
+      console.error(
+        JSON.stringify({
+          event: "ingest_discarded",
+          type: "transition",
+          reason: "state out of range",
+          controlId,
+          modelId,
+          fromState,
+          toState,
+          numStates: control.numStates,
+        })
+      );
       return c.json({ ok: false, error: "state out of range" }, 400);
     }
     const numStates = control.numStates;
