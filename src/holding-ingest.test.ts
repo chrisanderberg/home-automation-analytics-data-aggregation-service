@@ -253,7 +253,7 @@ describe("E2E: holding + transition same blob (no cross-talk)", () => {
           quarterIndex,
           numStates,
           (dv) => {
-            const idx = transIndex(0, 1, 0, utcBucket!, numStates);
+            const idx = transIndex(0, 1, 0, 0, numStates);
             const prev = getBlobValue(dv, idx);
             setBlobValue(dv, idx, prev + 1);
           }

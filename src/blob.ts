@@ -7,6 +7,7 @@
 import type { Database } from "bun:sqlite";
 import { blobLength } from "./constants.js";
 import { BLOB_VALUE_BYTES } from "./db.js";
+import { IntegrityError } from "./errors.js";
 
 /** Read value at slot index (64-bit LE). Values fit in number for holding ms and counts. */
 export function getBlobValue(dv: DataView, index: number): number {
@@ -78,7 +79,7 @@ export function updateAggregateBlob(
   }
   const expectedBytes = blobLength(numStates) * BLOB_VALUE_BYTES;
   if (row.blob.length !== expectedBytes) {
-    throw new Error("aggregate blob length mismatch");
+    throw new IntegrityError("aggregate blob length mismatch");
   }
   const buf = row.blob.buffer.slice(
     row.blob.byteOffset,

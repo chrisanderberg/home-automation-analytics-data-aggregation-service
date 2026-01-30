@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Database } from "bun:sqlite";
 import { blobLength } from "./constants.js";
+import { IntegrityError } from "./errors.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -75,10 +76,10 @@ export function getOrCreateAggregateRow(
 ): void {
   const control = getControl(db, controlId);
   if (!control) {
-    throw new Error("control missing");
+    throw new IntegrityError("control missing");
   }
   if (control.numStates !== numStates) {
-    throw new Error("num_states mismatch");
+    throw new IntegrityError("num_states mismatch");
   }
   const expectedBytes = blobLength(numStates) * BLOB_VALUE_BYTES;
   const row = db
@@ -88,7 +89,7 @@ export function getOrCreateAggregateRow(
     .get(controlId, modelId, quarterIndex) as { blob: Uint8Array } | undefined;
   if (row) {
     if (row.blob.length !== expectedBytes) {
-      throw new Error("aggregate blob length mismatch");
+      throw new IntegrityError("aggregate blob length mismatch");
     }
     return;
   }

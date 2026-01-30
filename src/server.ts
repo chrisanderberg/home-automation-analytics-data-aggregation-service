@@ -16,6 +16,7 @@ import {
   getBlobValue,
   setBlobValue,
 } from "./blob.js";
+import { isIntegrityError } from "./errors.js";
 import { holdIndex, transIndex } from "./indices.js";
 import { quarterIndexAt, splitByUtcQuarter } from "./quarters.js";
 
@@ -46,18 +47,6 @@ function isClientError(e: unknown): boolean {
   if (e === null || typeof e !== "object") return false;
   const o = e as { statusCode?: number; isClientError?: boolean };
   return o.statusCode === 400 || o.isClientError === true;
-}
-
-/** Integrity failures from getOrCreateAggregateRow / blob path: discard with 400, not 500. */
-const INTEGRITY_ERROR_MESSAGES = [
-  "control missing",
-  "num_states mismatch",
-  "aggregate blob length mismatch",
-] as const;
-
-function isIntegrityError(e: unknown): e is Error {
-  if (!(e instanceof Error)) return false;
-  return (INTEGRITY_ERROR_MESSAGES as readonly string[]).includes(e.message);
 }
 
 function main() {
