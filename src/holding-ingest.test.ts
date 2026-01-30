@@ -13,8 +13,8 @@ import {
   getControl,
   getOrCreateAggregateRow,
 } from "./db.js";
-import { holdIndex } from "./indices.js";
-import { splitByUtcQuarter } from "./quarters.js";
+import { holdIndex, transIndex } from "./indices.js";
+import { quarterIndexAt, splitByUtcQuarter } from "./quarters.js";
 
 const CTX: ClockContext = {
   timeZone: "America/Los_Angeles",
@@ -197,6 +197,83 @@ describe("holding ingestion E2E: cross-quarter interval updates two aggregate ro
       const q2Bucket = UtcClock.bucketAt(Date.UTC(2026, 3, 1, 0, 0, 0, 0));
       expect(q2Bucket).toBeDefined();
       expect(getBlobValue(q2Dv, holdIndex(state, 0, q2Bucket!))).toBe(60_000);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("E2E: holding + transition same blob (no cross-talk)", () => {
+  test("ingest holding then transition; blob has correct holding ms and transition count", async () => {
+    const db = openDb(":memory:");
+    try {
+      applySchema(db);
+      const controlId = "combined";
+      const modelId = "m1";
+      const numStates = 6;
+      const quarterIndex = 224; // 2026 Q1
+
+      upsertControl(db, controlId, "discrete", numStates, null);
+
+      // Holding: Mon 00:00–00:05 UTC, state 1 => 300_000 ms in UTC bucket 0
+      const holdStart = MONDAY_00_00_UTC_MS;
+      const holdEnd = holdStart + 5 * 60 * 1000;
+      const holdSlices = splitByUtcQuarter(holdStart, holdEnd);
+      expect(holdSlices).toHaveLength(1);
+      await withImmediateTransaction(db, () => {
+        getOrCreateAggregateRow(db, controlId, modelId, quarterIndex, numStates);
+        updateAggregateBlob(
+          db,
+          controlId,
+          modelId,
+          quarterIndex,
+          numStates,
+          (dv) => {
+            const utcSlices = UtcClock.splitInterval(holdStart, holdEnd) ?? [];
+            for (const bs of utcSlices) {
+              const idx = holdIndex(1, 0, bs.bucketIndex);
+              const prev = getBlobValue(dv, idx);
+              setBlobValue(dv, idx, prev + (bs.endTimeMs - bs.startTimeMs));
+            }
+          }
+        );
+      });
+
+      // Transition: Mon 00:02 UTC, from 0 to 1 => transIndex(0,1,0,0,6) += 1
+      const transTs = Date.UTC(2026, 1, 2, 0, 2, 0, 0);
+      expect(quarterIndexAt(transTs)).toBe(quarterIndex);
+      const utcBucket = UtcClock.bucketAt(transTs);
+      expect(utcBucket).toBe(0);
+      await withImmediateTransaction(db, () => {
+        getOrCreateAggregateRow(db, controlId, modelId, quarterIndex, numStates);
+        updateAggregateBlob(
+          db,
+          controlId,
+          modelId,
+          quarterIndex,
+          numStates,
+          (dv) => {
+            const idx = transIndex(0, 1, 0, utcBucket!, numStates);
+            const prev = getBlobValue(dv, idx);
+            setBlobValue(dv, idx, prev + 1);
+          }
+        );
+      });
+
+      const row = db
+        .query(
+          "SELECT blob FROM aggregates WHERE control_id = ? AND model_id = ? AND quarter_index = ?"
+        )
+        .get(controlId, modelId, quarterIndex) as { blob: Uint8Array } | undefined;
+      expect(row).toBeDefined();
+      const dv = new DataView(
+        row!.blob.buffer.slice(
+          row!.blob.byteOffset,
+          row!.blob.byteOffset + row!.blob.byteLength
+        )
+      );
+      expect(getBlobValue(dv, holdIndex(1, 0, 0))).toBe(300_000);
+      expect(getBlobValue(dv, transIndex(0, 1, 0, 0, numStates))).toBe(1);
     } finally {
       db.close();
     }

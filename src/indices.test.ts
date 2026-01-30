@@ -106,4 +106,10 @@ describe("dense index math goldens (deterministic, N=2 and N=6)", () => {
     const base = N * G + 27 * G;
     expect(transIndex(5, 2, 0, 726, N)).toBe(base + 726);
   });
+
+  test("N=2: transIndex(0,1,0,0,2) and transIndex(1,0,0,0,2) exact values (to>from and to<from)", () => {
+    const N = 2;
+    expect(transIndex(0, 1, 0, 0, N)).toBe(N * G);
+    expect(transIndex(1, 0, 0, 0, N)).toBe(N * G + G);
+  });
 });

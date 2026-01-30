@@ -48,6 +48,18 @@ function isClientError(e: unknown): boolean {
   return o.statusCode === 400 || o.isClientError === true;
 }
 
+/** Integrity failures from getOrCreateAggregateRow / blob path: discard with 400, not 500. */
+const INTEGRITY_ERROR_MESSAGES = [
+  "control missing",
+  "num_states mismatch",
+  "aggregate blob length mismatch",
+] as const;
+
+function isIntegrityError(e: unknown): e is Error {
+  if (!(e instanceof Error)) return false;
+  return (INTEGRITY_ERROR_MESSAGES as readonly string[]).includes(e.message);
+}
+
 function main() {
   let config;
   try {
@@ -225,6 +237,20 @@ function main() {
       });
       return c.json({ ok: true });
     } catch (e) {
+      if (isIntegrityError(e)) {
+        console.error(
+          JSON.stringify({
+            event: "ingest_discarded",
+            type: "holding",
+            reason: e.message,
+            controlId,
+            modelId,
+            startTimeMs,
+            endTimeMs,
+          })
+        );
+        return c.json({ ok: false, error: e.message }, 400);
+      }
       const errPayload =
         e instanceof Error
           ? { message: e.message, name: e.name, stack: e.stack }
@@ -336,6 +362,20 @@ function main() {
       });
       return c.json({ ok: true });
     } catch (e) {
+      if (isIntegrityError(e)) {
+        console.error(
+          JSON.stringify({
+            event: "ingest_discarded",
+            type: "transition",
+            reason: e.message,
+            controlId,
+            modelId,
+            timestampMs,
+            quarterIndex,
+          })
+        );
+        return c.json({ ok: false, error: e.message }, 400);
+      }
       const errPayload =
         e instanceof Error
           ? { message: e.message, name: e.name, stack: e.stack }
