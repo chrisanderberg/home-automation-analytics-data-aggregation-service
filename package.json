@@ -13,7 +13,7 @@
     "zod": "latest"
   },
   "devDependencies": {
-    "@types/suncalc": "^1.9.2",
+    "@types/suncalc": "latest",
     "bun-types": "latest"
   }
 }
