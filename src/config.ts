@@ -24,6 +24,11 @@ function parseNum(
       `Invalid ${key}: must be a number between ${min} and ${max} (got: ${value})`
     );
   }
+  if (key === "PORT" && !Number.isInteger(n)) {
+    throw new Error(
+      `Invalid ${key}: must be a number between ${min} and ${max} (got: ${value})`
+    );
+  }
   return n;
 }
 

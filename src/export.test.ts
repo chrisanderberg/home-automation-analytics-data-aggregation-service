@@ -17,7 +17,7 @@ describe("exportSnapshot", () => {
       try {
         const path = await exportSnapshot(db, exportsDir);
         expect(path).toContain("snapshot-");
-        expect(path).toMatch(/snapshot-\d{8}-\d{6}\.sqlite$/);
+        expect(path).toMatch(/snapshot-\d{8}-\d{9}\.sqlite$/);
 
         const snapshotDb = openDb(path);
         try {

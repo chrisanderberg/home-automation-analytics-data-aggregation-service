@@ -189,10 +189,13 @@ function meanSolarBucketEndMs(ms: number, longitudeDeg: number): number {
   const normalized = ((meanSolarMsInWeek % WEEK_MS) + WEEK_MS) % WEEK_MS;
   const bucketInWeek = Math.floor(normalized / BUCKET_MS);
   const nextBucketMeanSolarMs = (bucketInWeek + 1) * BUCKET_MS;
-  const nextBucketUtcMs =
+  let nextBucketUtcMs =
     weekStart +
     ((nextBucketMeanSolarMs - (longitudeDeg / 15) * (60 * 60 * 1000) + WEEK_MS) %
       WEEK_MS);
+  if (nextBucketUtcMs <= ms) {
+    nextBucketUtcMs += WEEK_MS;
+  }
   return nextBucketUtcMs;
 }
 

@@ -157,6 +157,24 @@ function main() {
       );
       return c.json({ ok: false, error: "endTimeMs must be > startTimeMs" }, 400);
     }
+    if (endTimeMs - startTimeMs > config.maxHoldingIntervalMs) {
+      console.error(
+        JSON.stringify({
+          event: "ingest_discarded",
+          type: "holding",
+          reason: "holding interval exceeds maxHoldingIntervalMs",
+          controlId,
+          modelId,
+          startTimeMs,
+          endTimeMs,
+          maxHoldingIntervalMs: config.maxHoldingIntervalMs,
+        })
+      );
+      return c.json(
+        { ok: false, error: "holding interval exceeds maxHoldingIntervalMs" },
+        400
+      );
+    }
     const control = getControl(db, controlId);
     if (!control) {
       console.error(

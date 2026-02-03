@@ -19,7 +19,8 @@ export async function exportSnapshot(
   const h = String(now.getUTCHours()).padStart(2, "0");
   const min = String(now.getUTCMinutes()).padStart(2, "0");
   const s = String(now.getUTCSeconds()).padStart(2, "0");
-  const filename = `snapshot-${y}${m}${d}-${h}${min}${s}.sqlite`;
+  const ms = String(now.getUTCMilliseconds()).padStart(3, "0");
+  const filename = `snapshot-${y}${m}${d}-${h}${min}${s}${ms}.sqlite`;
   const filePath = join(exportsDir, filename);
 
   let serialized: Uint8Array;
