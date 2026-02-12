@@ -93,6 +93,13 @@ Once the analytics strategy is validated in notebooks:
 - Production deployment workflows, CI/CD, multi-tenant auth.
 - Formal orchestration tooling (Dagster) unless needed later.
 
+## Solar clocks (Milestone 7)
+
+- **Mean solar time**: LMT = UTC + (longitude / 15) hours. Implemented as a pure formula; no SunCalc required. Always defined.
+- **Apparent solar time**: Time of day is offset from solar noon. Uses SunCalc `getTimes(date, lat, lon).solarNoon` for the calendar day containing the timestamp. Day boundaries are defined by solar noon (apparent noon to next apparent noon). Always defined for valid lat/lon.
+- **Unequal hours**: 6:00 = sunrise, 18:00 = sunset; 12 equal “day hours” and 12 equal “night hours.” Uses SunCalc `getTimes(...).sunrise` and `sunset`. **Undefined** when the sun does not rise or does not set (polar night or polar day). We treat undefined when `sunrise`/`sunset` are invalid (e.g. `!isFinite(date.getTime())`) or when day or night length is zero (24h sun or 24h night). When undefined, ingestion skips that clock only; the other four clocks still count.
+- Solar precision (equation of time, refraction, etc.) follows SunCalc’s behavior; no custom knobs. Location is from service config (`LATITUDE_DEG`, `LONGITUDE_DEG`).
+
 ## Notes for planning
 
 - The implementation plan should optimize for:
@@ -100,5 +107,7 @@ Once the analytics strategy is validated in notebooks:
   - correct time bucketing across five clocks,
   - dense blob storage with deterministic index math,
   - easy snapshot export and notebook-driven validation.
+- Coding-agent workflow assumes exported runtime APIs are documented inline with
+  JSDoc and that docstring coverage checks are treated as merge-blocking.
 - KDE bandwidth and sparse-data damping strategy remain TBD and should stay
   parameterized.

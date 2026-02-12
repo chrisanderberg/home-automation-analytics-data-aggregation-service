@@ -1,0 +1,281 @@
+import { describe, test, expect } from "bun:test";
+import { UtcClock, LocalClock, type ClockContext } from "./clocks.js";
+import {
+  withImmediateTransaction,
+  updateAggregateBlob,
+  getBlobValue,
+  setBlobValue,
+} from "./blob.js";
+import {
+  openDb,
+  applySchema,
+  upsertControl,
+  getControl,
+  getOrCreateAggregateRow,
+} from "./db.js";
+import { holdIndex, transIndex } from "./indices.js";
+import { quarterIndexAt, splitByUtcQuarter } from "./quarters.js";
+
+const CTX: ClockContext = {
+  timeZone: "America/Los_Angeles",
+  latitudeDeg: 37.77,
+  longitudeDeg: -122.42,
+};
+
+/** 2026-02-02T00:00:00.000Z (Monday 00:00 UTC). */
+const MONDAY_00_00_UTC_MS = Date.UTC(2026, 1, 2, 0, 0, 0, 0);
+
+/** 2026-03-31T23:59:00.000Z (Q1 2026, 1 min before Q2). */
+const Q1_END_MINUS_1MIN = Date.UTC(2026, 2, 31, 23, 59, 0, 0);
+/** 2026-04-01T00:01:00.000Z (Q2 2026, 1 min after Q2 start). */
+const Q2_START_PLUS_1MIN = Date.UTC(2026, 3, 1, 0, 1, 0, 0);
+
+describe("holding ingestion E2E: plan M5 golden (Monday 00:00–00:10 UTC, state 2)", () => {
+  test("ingest Monday 00:00–00:10 UTC in state 2; UTC bucket 0 and 1 each 300_000 ms, only state 2 holding region changes", async () => {
+    const db = openDb(":memory:");
+    try {
+      applySchema(db);
+      const controlId = "m5-golden";
+      const modelId = "m1";
+      const state = 2;
+      const numStates = 6;
+      const start = MONDAY_00_00_UTC_MS;
+      const end = start + 10 * 60 * 1000;
+
+      upsertControl(db, controlId, "discrete", numStates, null);
+      const slices = splitByUtcQuarter(start, end);
+      expect(slices).toHaveLength(1);
+      await withImmediateTransaction(db, () => {
+        for (const slice of slices) {
+          getOrCreateAggregateRow(
+            db,
+            controlId,
+            modelId,
+            slice.quarterIndex,
+            numStates
+          );
+          updateAggregateBlob(
+            db,
+            controlId,
+            modelId,
+            slice.quarterIndex,
+            numStates,
+            (dv) => {
+              const utcSlices = UtcClock.splitInterval(slice.startTimeMs, slice.endTimeMs);
+              for (const bs of utcSlices ?? []) {
+                const idx = holdIndex(state, 0, bs.bucketIndex);
+                const prev = getBlobValue(dv, idx);
+                setBlobValue(dv, idx, prev + (bs.endTimeMs - bs.startTimeMs));
+              }
+              const localSlices = LocalClock.splitInterval(
+                slice.startTimeMs,
+                slice.endTimeMs,
+                CTX
+              );
+              for (const bs of localSlices ?? []) {
+                const idx = holdIndex(state, 1, bs.bucketIndex);
+                const prev = getBlobValue(dv, idx);
+                setBlobValue(dv, idx, prev + (bs.endTimeMs - bs.startTimeMs));
+              }
+            }
+          );
+        }
+      });
+
+      const quarterIndex = 224;
+      const row = db
+        .query(
+          "SELECT blob FROM aggregates WHERE control_id = ? AND model_id = ? AND quarter_index = ?"
+        )
+        .get(controlId, modelId, quarterIndex) as { blob: Uint8Array } | undefined;
+      expect(row).toBeDefined();
+      const dv = new DataView(
+        row!.blob.buffer.slice(
+          row!.blob.byteOffset,
+          row!.blob.byteOffset + row!.blob.byteLength
+        )
+      );
+      expect(getBlobValue(dv, holdIndex(state, 0, 0))).toBe(300_000);
+      expect(getBlobValue(dv, holdIndex(state, 0, 1))).toBe(300_000);
+      for (let s = 0; s < numStates; s++) {
+        if (s === state) continue;
+        expect(getBlobValue(dv, holdIndex(s, 0, 0))).toBe(0);
+        expect(getBlobValue(dv, holdIndex(s, 0, 1))).toBe(0);
+      }
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("holding ingestion E2E: cross-quarter interval updates two aggregate rows", () => {
+  test("ingest 2026-03-31T23:59:00Z → 2026-04-01T00:01:00Z in state 0; Q1 and Q2 rows have 60k ms each in expected UTC buckets", async () => {
+    const db = openDb(":memory:");
+    try {
+      applySchema(db);
+      const controlId = "test-control";
+      const modelId = "m1";
+      const state = 0;
+      const numStates = 6;
+
+      upsertControl(db, controlId, "discrete", numStates, null);
+      const control = getControl(db, controlId);
+      expect(control).not.toBeNull();
+      expect(control!.numStates).toBe(numStates);
+
+      const slices = splitByUtcQuarter(Q1_END_MINUS_1MIN, Q2_START_PLUS_1MIN);
+      expect(slices).toHaveLength(2);
+      expect(slices[0].endTimeMs - slices[0].startTimeMs).toBe(60_000);
+      expect(slices[1].endTimeMs - slices[1].startTimeMs).toBe(60_000);
+
+      await withImmediateTransaction(db, () => {
+        for (const slice of slices) {
+          getOrCreateAggregateRow(
+            db,
+            controlId,
+            modelId,
+            slice.quarterIndex,
+            numStates
+          );
+          updateAggregateBlob(
+            db,
+            controlId,
+            modelId,
+            slice.quarterIndex,
+            numStates,
+            (dv) => {
+              const utcSlices = UtcClock.splitInterval(
+                slice.startTimeMs,
+                slice.endTimeMs
+              );
+              for (const bs of utcSlices ?? []) {
+                const idx = holdIndex(state, 0, bs.bucketIndex);
+                const prev = getBlobValue(dv, idx);
+                setBlobValue(dv, idx, prev + (bs.endTimeMs - bs.startTimeMs));
+              }
+              const localSlices = LocalClock.splitInterval(
+                slice.startTimeMs,
+                slice.endTimeMs,
+                CTX
+              );
+              for (const bs of localSlices ?? []) {
+                const idx = holdIndex(state, 1, bs.bucketIndex);
+                const prev = getBlobValue(dv, idx);
+                setBlobValue(dv, idx, prev + (bs.endTimeMs - bs.startTimeMs));
+              }
+            }
+          );
+        }
+      });
+
+      const q1Row = db
+        .query(
+          "SELECT blob FROM aggregates WHERE control_id = ? AND model_id = ? AND quarter_index = ?"
+        )
+        .get(controlId, modelId, 224) as { blob: Uint8Array } | undefined;
+      expect(q1Row).toBeDefined();
+      const q1Buf = q1Row!.blob.buffer.slice(
+        q1Row!.blob.byteOffset,
+        q1Row!.blob.byteOffset + q1Row!.blob.byteLength
+      );
+      const q1Dv = new DataView(q1Buf);
+      const q1Bucket = UtcClock.bucketAt(Q1_END_MINUS_1MIN);
+      expect(q1Bucket).toBeDefined();
+      expect(getBlobValue(q1Dv, holdIndex(state, 0, q1Bucket!))).toBe(60_000);
+
+      const q2Row = db
+        .query(
+          "SELECT blob FROM aggregates WHERE control_id = ? AND model_id = ? AND quarter_index = ?"
+        )
+        .get(controlId, modelId, 225) as { blob: Uint8Array } | undefined;
+      expect(q2Row).toBeDefined();
+      const q2Buf = q2Row!.blob.buffer.slice(
+        q2Row!.blob.byteOffset,
+        q2Row!.blob.byteOffset + q2Row!.blob.byteLength
+      );
+      const q2Dv = new DataView(q2Buf);
+      const q2Bucket = UtcClock.bucketAt(Date.UTC(2026, 3, 1, 0, 0, 0, 0));
+      expect(q2Bucket).toBeDefined();
+      expect(getBlobValue(q2Dv, holdIndex(state, 0, q2Bucket!))).toBe(60_000);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("E2E: holding + transition same blob (no cross-talk)", () => {
+  test("ingest holding then transition; blob has correct holding ms and transition count", async () => {
+    const db = openDb(":memory:");
+    try {
+      applySchema(db);
+      const controlId = "combined";
+      const modelId = "m1";
+      const numStates = 6;
+      const quarterIndex = 224; // 2026 Q1
+
+      upsertControl(db, controlId, "discrete", numStates, null);
+
+      // Holding: Mon 00:00–00:05 UTC, state 1 => 300_000 ms in UTC bucket 0
+      const holdStart = MONDAY_00_00_UTC_MS;
+      const holdEnd = holdStart + 5 * 60 * 1000;
+      const holdSlices = splitByUtcQuarter(holdStart, holdEnd);
+      expect(holdSlices).toHaveLength(1);
+      await withImmediateTransaction(db, () => {
+        getOrCreateAggregateRow(db, controlId, modelId, quarterIndex, numStates);
+        updateAggregateBlob(
+          db,
+          controlId,
+          modelId,
+          quarterIndex,
+          numStates,
+          (dv) => {
+            const utcSlices = UtcClock.splitInterval(holdStart, holdEnd) ?? [];
+            for (const bs of utcSlices) {
+              const idx = holdIndex(1, 0, bs.bucketIndex);
+              const prev = getBlobValue(dv, idx);
+              setBlobValue(dv, idx, prev + (bs.endTimeMs - bs.startTimeMs));
+            }
+          }
+        );
+      });
+
+      // Transition: Mon 00:02 UTC, from 0 to 1 => transIndex(0,1,0,0,6) += 1
+      const transTs = Date.UTC(2026, 1, 2, 0, 2, 0, 0);
+      expect(quarterIndexAt(transTs)).toBe(quarterIndex);
+      const utcBucket = UtcClock.bucketAt(transTs);
+      expect(utcBucket).toBe(0);
+      await withImmediateTransaction(db, () => {
+        getOrCreateAggregateRow(db, controlId, modelId, quarterIndex, numStates);
+        updateAggregateBlob(
+          db,
+          controlId,
+          modelId,
+          quarterIndex,
+          numStates,
+          (dv) => {
+            const idx = transIndex(0, 1, 0, 0, numStates);
+            const prev = getBlobValue(dv, idx);
+            setBlobValue(dv, idx, prev + 1);
+          }
+        );
+      });
+
+      const row = db
+        .query(
+          "SELECT blob FROM aggregates WHERE control_id = ? AND model_id = ? AND quarter_index = ?"
+        )
+        .get(controlId, modelId, quarterIndex) as { blob: Uint8Array } | undefined;
+      expect(row).toBeDefined();
+      const dv = new DataView(
+        row!.blob.buffer.slice(
+          row!.blob.byteOffset,
+          row!.blob.byteOffset + row!.blob.byteLength
+        )
+      );
+      expect(getBlobValue(dv, holdIndex(1, 0, 0))).toBe(300_000);
+      expect(getBlobValue(dv, transIndex(0, 1, 0, 0, numStates))).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+});

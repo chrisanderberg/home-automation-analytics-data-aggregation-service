@@ -140,7 +140,12 @@ curl -sS -X POST http://localhost:8787/ingest/transition \
 
 ### `POST /admin/export-snapshot`
 
-Produce a consistent SQLite snapshot for offline analysis.
+Produce a consistent SQLite snapshot for offline analysis. The snapshot is
+created by serializing the database and writing it to a file; the exported file
+is consistent at write time. Snapshots are written to `EXPORTS_DIR` (default
+`exports/`). The intended workflow is manual copy of the snapshot file (e.g.
+`scp` or `cp`) to the analysis machine; the service does not provide network
+transfer or auth for exports.
 
 Example:
 
@@ -151,7 +156,7 @@ curl -sS -X POST http://localhost:8787/admin/export-snapshot
 Response:
 
 ```json
-{ "ok": true, "path": "exports/snapshot-YYYYMMDD-HHMMSS.sqlite" }
+{ "ok": true, "path": "exports/snapshot-YYYYMMDD-HHMMSSmmm.sqlite" }
 ```
 
 Then copy it to the analysis machine manually, for example:
@@ -173,6 +178,19 @@ Run tests:
 ```bash
 bun test
 ```
+
+Run type check:
+
+```bash
+bunx tsc --noEmit
+```
+
+Documentation quality check for contributors and coding agents:
+
+- When changing exported functions/classes in `src/`, add or update JSDoc in the
+  same commit.
+- If your environment includes a docstring coverage check (for example in CI),
+  run it locally and fix coverage gaps before merge.
 
 Run the server (example env vars):
 

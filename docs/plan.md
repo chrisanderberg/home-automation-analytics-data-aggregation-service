@@ -77,9 +77,14 @@ Canonical indices (zero-based):
   - `offsetWithinFromBlock(from,to) = (to < from) ? to : (to - 1)`
 
 ### Blob numeric encoding (service decision)
-- Store all values as **u64** in **little-endian** inside SQLite BLOB.
-  - holding times: elapsed milliseconds (u64)
-  - transition counts: increment-by-one counts (u64)
+- All values are **unsigned integers** (holding times: elapsed milliseconds;
+  transition counts: increment-by-one counts).
+- Use each system’s native representation:
+  - **JavaScript**: native `number` for in-memory values.
+  - **SQLite BLOB**: store values using the storage/driver’s native integer
+    representation (e.g. 64-bit integer if that is the convention for the
+    SQLite driver in use). No need to mandate a specific bit width or byte
+    order; follow what is natural for the stack.
 
 ### Data integrity posture (`spec.md`)
 If integrity fails, **discard** the affected data (HTTP 400 + log reason).
@@ -92,12 +97,28 @@ clock only when that clock’s time mapping is undefined per `spec.md`.
 
 - Runtime: Bun
 - Web: Hono
-- DB: SQLite (Bun native driver via `bun:sqlite`)
+- DB: SQLite via **bun:sqlite** (Bun native driver). Use **exactly one** SQLite
+  connection for all writes and for export. Export is implemented by serializing
+  the database to memory and writing to a file, producing a consistent snapshot
+  at write time.
 - Validation: Zod
 - Time zones/DST/calendar: `@js-temporal/polyfill`
   - used to compute Local time in a **configurable IANA timezone**, deterministically
 - Solar: `suncalc`
   - used for sunrise/sunset and other solar computations for solar clocks
+
+---
+
+## Cross-cutting quality gates (all milestones)
+
+These checks are required for every milestone change set, even when not repeated
+inside individual milestone text:
+
+- Tests pass (`bun test`).
+- TypeScript check passes (`bunx tsc --noEmit`).
+- Docstrings are updated for changed exported symbols in `src/`.
+- If CI/pre-merge has a docstring coverage threshold, the change set must meet
+  that threshold before merge.
 
 ---
 
@@ -188,7 +209,7 @@ Response:
 ### `POST /admin/export-snapshot`
 Response:
 ```json
-{ "ok": true, "path": "exports/snapshot-YYYYMMDD-HHMMSS.sqlite" }
+{ "ok": true, "path": "exports/snapshot-YYYYMMDD-HHMMSSmmm.sqlite" }
 ```
 
 ---
@@ -196,31 +217,31 @@ Response:
 ## Milestones
 
 ### Milestone 0 — Project skeleton + dense-layout invariants tests (UNCHANGED)
-**Goal**
+#### Goal
 Implement dense index math once, with strong tests.
 
-**Deliverables**
-- `layout/constants.ts`, `layout/indices.ts`
+#### Deliverables
+- `src/constants.ts`, `src/indices.ts`
 - Tests:
   - blob length = `N^2 * G`
   - holding region = `[0, N*G)`
   - transition region = `[N*G, N^2*G)`
   - transition groups cover all `from != to` exactly once
 
-**Acceptance criteria**
+#### Acceptance criteria
 - Tests pass for N=2..10 (and specifically N=6).
 
-**Edge cases**
+#### Edge cases
 - N=2, to<from and to>from branches.
 
 ---
 
 ### Milestone 1 — Service scaffold generation (layout + schema + route stubs)
-**Goal**
+#### Goal
 Generate a compilable scaffold that locks in the API contracts, DB schema, and
 dependency choices, while leaving core algorithms as TODOs.
 
-**Deliverables**
+#### Deliverables
 1) **SQLite schema file** defining `controls` and `aggregates` tables (plus
    recommended indexes and PRAGMAs).
 2) **Dependencies installed**:
@@ -232,7 +253,7 @@ dependency choices, while leaving core algorithms as TODOs.
    - transactional blob update wrapper (`BEGIN IMMEDIATE` read-modify-write)
    - snapshot export implementation
 
-**Acceptance criteria (command-level, deterministic)**
+#### Acceptance criteria (command-level, deterministic)
 - Running tests:
   1. `bun test`
      - exits with code 0
@@ -276,12 +297,12 @@ dependency choices, while leaving core algorithms as TODOs.
      - HTTP 200 `{ "ok": true, "path": "exports/..." }` OR HTTP 501 explicit
      - must not crash the process
 
-**Non-goals**
+#### Non-goals
 - Correct bucketing/splitting logic (Milestone 3+)
 - Correct solar clock mapping (Milestone 7)
 - Correct snapshot export implementation (Milestone 8)
 
-**Edge cases (must be enforced even in stubs)**
+#### Edge cases (must be enforced even in stubs)
 - Config validation:
   - invalid `TIME_ZONE` prevents server start (fails fast)
   - invalid lat/lon prevents server start
@@ -292,11 +313,11 @@ dependency choices, while leaving core algorithms as TODOs.
 ---
 
 ### Milestone 2 — SQLite operations + transactional blob RMW helper
-**Goal**
+#### Goal
 Make DB access correct and safe: schema applied, CRUD works, blob updates are
 atomic (no lost updates).
 
-**Deliverables**
+#### Deliverables
 - Schema applied at startup (or via a one-time init command)
 - Controls CRUD:
   - upsert control
@@ -309,23 +330,23 @@ atomic (no lost updates).
     - `COMMIT` / `ROLLBACK`
   - `updateAggregateBlob()` used only inside a transaction
 
-**Acceptance criteria**
+#### Acceptance criteria
 - Concurrency sanity check (local):
   - two rapid ingestions do not lose increments (requires transaction wrapper)
 
-**Edge cases**
+#### Edge cases
 - control missing => discard ingestion
 - `num_states` mismatch => discard ingestion (integrity failure)
 
 ---
 
 ### Milestone 3 — UTC + Local clock bucketing and interval splitting (Temporal)
-**Goal**
+#### Goal
 Implement correct time-of-week bucketing and holding-interval splitting for:
 - UTC clock
 - Local clock in configurable IANA timezone (Temporal)
 
-**Deliverables**
+#### Deliverables
 - `UtcClock.bucketAt`, `UtcClock.splitInterval`
 - `LocalClock.bucketAt`, `LocalClock.splitInterval`
 - Algorithm requirements:
@@ -333,7 +354,7 @@ Implement correct time-of-week bucketing and holding-interval splitting for:
   - conservation: sum(ms) == end-start
   - Local clock handles DST by virtue of Temporal conversions; labels may repeat/skip
 
-**Acceptance criteria**
+#### Acceptance criteria
 - UTC bucketAt goldens (Monday=0):
   - `2026-02-02T00:00:00.000Z` => bucket 0
   - `2026-02-01T23:59:59.999Z` => bucket 2015
@@ -347,15 +368,15 @@ Implement correct time-of-week bucketing and holding-interval splitting for:
 ---
 
 ### Milestone 4 — Quarter boundary splitting (UTC) + integration into holding ingestion
-**Goal**
+#### Goal
 Correctly partition holding intervals into UTC quarter windows and update the
 correct aggregate rows.
 
-**Deliverables**
+#### Deliverables
 - `splitByUtcQuarter(start,end)` implemented correctly
 - Holding ingestion uses it and updates multiple quarter rows when required
 
-**Acceptance criteria**
+#### Acceptance criteria
 - Golden test:
   - `2026-03-31T23:59:00Z` → `2026-04-01T00:01:00Z` splits into two slices:
     - 60,000 ms in Q1 and 60,000 ms in Q2
@@ -365,11 +386,11 @@ correct aggregate rows.
 ---
 
 ### Milestone 5 — Holding ingestion fully implemented (UTC + Local) + dense blob updates
-**Goal**
+#### Goal
 Make holding ingestion correct end-to-end for at least UTC and Local clocks,
 updating dense blob holding region.
 
-**Deliverables**
+#### Deliverables
 - `POST /ingest/holding`:
   - validates payload (Zod)
   - validates control + state range
@@ -379,7 +400,7 @@ updating dense blob holding region.
       - updates `holdIndex(...)` by elapsed ms per bucket
   - runs updates inside `BEGIN IMMEDIATE` transaction(s)
 
-**Acceptance criteria**
+#### Acceptance criteria
 - End-to-end test:
   - create control N=6
   - ingest Monday 00:00–00:10 UTC in state 2
@@ -388,18 +409,18 @@ updating dense blob holding region.
     - bucket 1: 300,000 ms
   - only state 2 holding region changes
 
-**Edge cases**
+#### Edge cases
 - end <= start => discard
 - holding too long (optional guard) => discard
 
 ---
 
 ### Milestone 6 — Transition ingestion fully implemented (UTC + Local) + dense blob updates
-**Goal**
+#### Goal
 Make transition ingestion correct end-to-end for at least UTC and Local clocks,
 updating dense blob transition region.
 
-**Deliverables**
+#### Deliverables
 - `POST /ingest/transition`:
   - validates payload
   - validates control + state ranges
@@ -408,7 +429,7 @@ updating dense blob transition region.
   - increments `transIndex(...)` by 1 for each defined clock
   - transactional update (`BEGIN IMMEDIATE` RMW)
 
-**Acceptance criteria**
+#### Acceptance criteria
 - End-to-end test:
   - ingest transition at `2026-02-02T00:02:00Z`, 5→2
   - UTC increments `transIndex(5,2,UTC,bucket0)` exactly by 1
@@ -416,47 +437,59 @@ updating dense blob transition region.
 ---
 
 ### Milestone 7 — Solar clocks (SunCalc) implemented + always-compute-five-clocks rule
-**Goal**
+#### Goal
 Implement remaining clocks and ensure ingestion always runs five-clock computation
 in parallel, skipping only undefined solar cases.
 
-**Deliverables**
+#### Deliverables
 - `MeanSolarClock`, `ApparentSolarClock`, `UnequalHoursClock` implemented using SunCalc
 - Undefined handling per `spec.md`:
   - if clock mapping undefined => do not count for that clock
 - `createClocks()` returns all five in canonical order and ingestion loops all five
 
-**Acceptance criteria**
+#### Acceptance criteria
 - For a normal mid-latitude location/date, all clocks produce valid indices
 - For an unequal-hours undefined scenario (e.g., polar day/night), unequal-hours
   produces no counts while other clocks still count
 
-**Note**
+#### Note
 Solar precision policy is a parameterized implementation detail; document any
 assumptions and keep knobs configurable if needed.
 
 ---
 
 ### Milestone 8 — Snapshot/export implemented (consistent SQLite snapshot)
-**Goal**
+#### Goal
 Create consistent SQLite snapshot files for offline analysis.
 
-**Deliverables**
-- `POST /admin/export-snapshot` writes `exports/snapshot-YYYYMMDD-HHMMSS.sqlite`
-- Prefer SQLite online backup API if exposed; otherwise implement a safe fallback
-- Document manual copy workflow (scp/copy) in an exports doc (filename TBD)
+#### Strategy (implementation)
+- Use **bun:sqlite**: the service uses a single SQLite connection for all
+  ingestion and export. Export is implemented by calling `db.serialize()` to
+  produce a full copy of the database in memory, then writing that to
+  `exports/snapshot-YYYYMMDD-HHMMSSmmm.sqlite` (UTC timestamp with
+  milliseconds). The snapshot is consistent at write
+  time. If serialize or write fails, log and return an error; do not silently
+  produce partial copies.
 
-**Acceptance criteria**
-- Snapshot file can be opened while service continues ingesting
-- Snapshot is consistent (no partial writes)
+#### Deliverables
+- `POST /admin/export-snapshot` writes
+  `exports/snapshot-YYYYMMDD-HHMMSSmmm.sqlite` using bun:sqlite’s
+  `serialize()` and then writing the result to the exports directory.
+- Service uses exactly one SQLite connection (all ingestion and export go
+  through it).
+- Manual copy workflow (scp/copy) is documented in the README.
+
+#### Acceptance criteria
+- Snapshot file can be opened while service continues ingesting.
+- Snapshot is consistent (no partial writes).
 
 ---
 
 ### Milestone 9 — Hardening: logging, discard reasons, golden suite
-**Goal**
+#### Goal
 Make correctness robust and failures obvious.
 
-**Deliverables**
+#### Deliverables
 - Structured logging for every discard (event name + reason + key fields)
 - Expanded tests:
   - dense index math goldens
@@ -465,7 +498,7 @@ Make correctness robust and failures obvious.
   - quarter splitting goldens
   - end-to-end DB blob assertions
 
-**Acceptance criteria**
+#### Acceptance criteria
 - `bun test` passes reliably on any machine (independent of host timezone)
 
 ---
