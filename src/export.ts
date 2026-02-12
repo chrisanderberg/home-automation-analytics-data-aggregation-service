@@ -10,11 +10,16 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const processLogger = {
+  /** Log structured export errors to stderr. */
   error(payload: unknown): void {
     console.error(JSON.stringify(payload));
   },
 };
 
+/**
+ * Create a consistent SQLite snapshot and write it to exportsDir.
+ * Returns the absolute/relative path written by Bun.write.
+ */
 export async function exportSnapshot(
   db: Database,
   exportsDir: string,

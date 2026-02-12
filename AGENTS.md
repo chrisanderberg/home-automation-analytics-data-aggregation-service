@@ -115,6 +115,20 @@ From `docs/spec.md` and `docs/plan.md`:
   value is guaranteed by invariants (e.g. UTC clock always returns a number).
 - Do not leave new type errors or lint issues in the codebase.
 
+## Docstrings and API documentation
+
+- Treat docstring coverage failures as blocking (same as test/lint failures).
+- For any changed or added exported symbol in `src/` (`export function`,
+  `export class`, exported constants with function values), add or update a
+  JSDoc block in the same change.
+- If behavior or constraints change, update the docstring text at the same time;
+  do not defer documentation updates.
+- Before marking work done, run the same docstring coverage check used by CI or
+  pre-merge checks. If that command is not available locally, perform a manual
+  pass over changed exports and confirm each has JSDoc.
+- Any agent final response that includes code changes must explicitly state that
+  docstring checks were run (or that a manual export/JSDoc audit was completed).
+
 ## Commands (typical)
 
 Use these commands when relevant to verify milestones:
@@ -122,6 +136,7 @@ Use these commands when relevant to verify milestones:
 ```bash
 bun install
 bun test
+bunx tsc --noEmit
 bun run src/server.ts
 ```
 

@@ -10,6 +10,7 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 /** Bytes per blob value (64-bit little-endian). */
 export const BLOB_VALUE_BYTES = 8;
 
+/** Open the SQLite database and apply required connection PRAGMAs. */
 export function openDb(sqlitePath: string): Database {
   const db = new Database(sqlitePath);
   db.exec("PRAGMA journal_mode = WAL");
@@ -17,12 +18,17 @@ export function openDb(sqlitePath: string): Database {
   return db;
 }
 
+/** Apply schema DDL from src/schema.sql to the current database. */
 export function applySchema(db: Database): void {
   const schemaPath = join(__dirname, "schema.sql");
   const sql = readFileSync(schemaPath, "utf-8");
   db.exec(sql);
 }
 
+/**
+ * Create or update a control definition.
+ * Rejects num_states changes when aggregate rows already exist for the control.
+ */
 export function upsertControl(
   db: Database,
   controlId: string,
@@ -67,6 +73,7 @@ export function upsertControl(
   }
 }
 
+/** Load a control definition, validating stored state_labels JSON shape. */
 export function getControl(
   db: Database,
   controlId: string

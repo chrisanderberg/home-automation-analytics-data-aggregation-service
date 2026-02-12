@@ -179,6 +179,19 @@ Run tests:
 bun test
 ```
 
+Run type check:
+
+```bash
+bunx tsc --noEmit
+```
+
+Documentation quality check for contributors and coding agents:
+
+- When changing exported functions/classes in `src/`, add or update JSDoc in the
+  same commit.
+- If your environment includes a docstring coverage check (for example in CI),
+  run it locally and fix coverage gaps before merge.
+
 Run the server (example env vars):
 
 ```bash

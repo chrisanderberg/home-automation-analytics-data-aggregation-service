@@ -107,5 +107,7 @@ Once the analytics strategy is validated in notebooks:
   - correct time bucketing across five clocks,
   - dense blob storage with deterministic index math,
   - easy snapshot export and notebook-driven validation.
+- Coding-agent workflow assumes exported runtime APIs are documented inline with
+  JSDoc and that docstring coverage checks are treated as merge-blocking.
 - KDE bandwidth and sparse-data damping strategy remain TBD and should stay
   parameterized.

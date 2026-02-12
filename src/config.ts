@@ -10,6 +10,10 @@ export interface Config {
   maxHoldingIntervalMs: number;
 }
 
+/**
+ * Parse numeric environment values with bounds checking and optional integer enforcement.
+ * Returns defaultValue when the variable is missing/empty.
+ */
 function parseNum(
   key: string,
   value: string | undefined,
@@ -33,6 +37,7 @@ function parseNum(
   return n;
 }
 
+/** Load and validate runtime configuration from environment variables. */
 export function loadConfig(env: Record<string, string | undefined>): Config {
   const timeZone = env.TIME_ZONE;
   if (!timeZone || timeZone.trim() === "") {

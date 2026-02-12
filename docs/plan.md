@@ -109,6 +109,19 @@ clock only when that clock’s time mapping is undefined per `spec.md`.
 
 ---
 
+## Cross-cutting quality gates (all milestones)
+
+These checks are required for every milestone change set, even when not repeated
+inside individual milestone text:
+
+- Tests pass (`bun test`).
+- TypeScript check passes (`bunx tsc --noEmit`).
+- Docstrings are updated for changed exported symbols in `src/`.
+- If CI/pre-merge has a docstring coverage threshold, the change set must meet
+  that threshold before merge.
+
+---
+
 ## Configuration (service-level)
 
 Required:

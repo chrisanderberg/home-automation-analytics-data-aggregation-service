@@ -49,6 +49,7 @@ function isClientError(e: unknown): boolean {
   return o.statusCode === 400 || o.isClientError === true;
 }
 
+/** Bootstrap configuration, database, routes, and start the HTTP server. */
 function main() {
   let config;
   try {
