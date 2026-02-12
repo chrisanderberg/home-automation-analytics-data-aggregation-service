@@ -37,10 +37,13 @@ export async function exportSnapshot(
     serialized = db.serialize();
   } catch (err) {
     processLogger.error({
-        event: "export_snapshot_failed",
-        reason: "serialize failed",
-        error: err instanceof Error ? err.message : String(err),
-      });
+      event: "export_snapshot_failed",
+      reason: "serialize failed",
+      error:
+        err instanceof Error
+          ? { name: err.name, message: err.message, stack: err.stack }
+          : { raw: String(err) },
+    });
     throw err;
   }
 
@@ -63,11 +66,14 @@ export async function exportSnapshot(
     await Bun.write(filePath, serialized);
   } catch (err) {
     processLogger.error({
-        event: "export_snapshot_failed",
-        reason: "write failed",
-        path: filePath,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      event: "export_snapshot_failed",
+      reason: "write failed",
+      path: filePath,
+      error:
+        err instanceof Error
+          ? { name: err.name, message: err.message, stack: err.stack }
+          : { raw: String(err) },
+    });
     throw err;
   }
 

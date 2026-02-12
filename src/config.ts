@@ -27,7 +27,7 @@ function parseNum(
   }
   if (requireInteger && !Number.isInteger(n)) {
     throw new Error(
-      `Invalid ${key}: must be a number between ${min} and ${max} (got: ${value})`
+      `Invalid ${key}: must be an integer between ${min} and ${max} (got: ${value})`
     );
   }
   return n;

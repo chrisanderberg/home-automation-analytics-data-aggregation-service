@@ -30,30 +30,41 @@ export function upsertControl(
   numStates: number,
   stateLabels: string[] | null
 ): void {
-  const existing = db
-    .query("SELECT num_states FROM controls WHERE control_id = ?")
-    .get(controlId) as { num_states: number } | null;
-  if (existing !== null && existing.num_states !== numStates) {
-    const aggregateExists = db
-      .query("SELECT 1 AS present FROM aggregates WHERE control_id = ? LIMIT 1")
-      .get(controlId) as { present: number } | null;
-    if (aggregateExists !== null) {
-      throw new IntegrityError(
-        "cannot change num_states for control with existing aggregates"
-      );
+  db.run("BEGIN IMMEDIATE");
+  try {
+    const existing = db
+      .query("SELECT num_states FROM controls WHERE control_id = ?")
+      .get(controlId) as { num_states: number } | null;
+    if (existing !== null && existing.num_states !== numStates) {
+      const aggregateExists = db
+        .query("SELECT 1 AS present FROM aggregates WHERE control_id = ? LIMIT 1")
+        .get(controlId) as { present: number } | null;
+      if (aggregateExists !== null) {
+        throw new IntegrityError(
+          "cannot change num_states for control with existing aggregates"
+        );
+      }
     }
-  }
 
-  const labelsJson = stateLabels === null ? null : JSON.stringify(stateLabels);
-  db.run(
-    `INSERT INTO controls (control_id, control_type, num_states, state_labels)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT (control_id) DO UPDATE SET
-       control_type = excluded.control_type,
-       num_states = excluded.num_states,
-       state_labels = excluded.state_labels`,
-    [controlId, controlType, numStates, labelsJson]
-  );
+    const labelsJson = stateLabels === null ? null : JSON.stringify(stateLabels);
+    db.run(
+      `INSERT INTO controls (control_id, control_type, num_states, state_labels)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (control_id) DO UPDATE SET
+         control_type = excluded.control_type,
+         num_states = excluded.num_states,
+         state_labels = excluded.state_labels`,
+      [controlId, controlType, numStates, labelsJson]
+    );
+    db.run("COMMIT");
+  } catch (err) {
+    try {
+      db.run("ROLLBACK");
+    } catch (_) {
+      /* ignore rollback errors; rethrow original */
+    }
+    throw err;
+  }
 }
 
 export function getControl(
@@ -71,7 +82,11 @@ export function getControl(
   let stateLabels: string[] | null = null;
   if (row.state_labels !== null) {
     try {
-      stateLabels = JSON.parse(row.state_labels) as string[];
+      const parsed = JSON.parse(row.state_labels) as unknown;
+      if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === "string")) {
+        throw new IntegrityError("control state_labels malformed JSON");
+      }
+      stateLabels = parsed;
     } catch {
       throw new IntegrityError("control state_labels malformed JSON");
     }
@@ -116,8 +131,14 @@ export function getOrCreateAggregateRow(
     .query(
       "SELECT blob FROM aggregates WHERE control_id = ? AND model_id = ? AND quarter_index = ?"
     )
-    .get(controlId, modelId, quarterIndex) as { blob: Uint8Array } | null;
-  if (row === null || row.blob.length !== expectedBytes) {
+    .get(controlId, modelId, quarterIndex) as { blob: Uint8Array | null } | null;
+  if (row === null) {
+    throw new IntegrityError("aggregate row missing");
+  }
+  if (row.blob === null) {
+    throw new IntegrityError("aggregate blob is null");
+  }
+  if (row.blob.length !== expectedBytes) {
     throw new IntegrityError("aggregate blob length mismatch");
   }
 }
