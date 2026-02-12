@@ -124,7 +124,21 @@ function main() {
         400
       );
     }
-    upsertControl(db, controlId, controlType, numStates, stateLabels ?? null);
+    try {
+      upsertControl(db, controlId, controlType, numStates, stateLabels ?? null);
+    } catch (e) {
+      if (isIntegrityError(e)) {
+        console.error(
+          JSON.stringify({
+            event: "control_discarded",
+            reason: e.message,
+            controlId,
+          })
+        );
+        return c.json({ ok: false, error: e.message }, 400);
+      }
+      throw e;
+    }
     return c.json({ ok: true });
   });
 

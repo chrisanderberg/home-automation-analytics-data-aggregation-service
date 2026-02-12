@@ -209,7 +209,7 @@ Response:
 ### `POST /admin/export-snapshot`
 Response:
 ```json
-{ "ok": true, "path": "exports/snapshot-YYYYMMDD-HHMMSS.sqlite" }
+{ "ok": true, "path": "exports/snapshot-YYYYMMDD-HHMMSSmmm.sqlite" }
 ```
 
 ---
@@ -466,13 +466,15 @@ Create consistent SQLite snapshot files for offline analysis.
 - Use **bun:sqlite**: the service uses a single SQLite connection for all
   ingestion and export. Export is implemented by calling `db.serialize()` to
   produce a full copy of the database in memory, then writing that to
-  `exports/snapshot-YYYYMMDD-HHMMSS.sqlite`. The snapshot is consistent at write
+  `exports/snapshot-YYYYMMDD-HHMMSSmmm.sqlite` (UTC timestamp with
+  milliseconds). The snapshot is consistent at write
   time. If serialize or write fails, log and return an error; do not silently
   produce partial copies.
 
 #### Deliverables
-- `POST /admin/export-snapshot` writes `exports/snapshot-YYYYMMDD-HHMMSS.sqlite`
-  using bun:sqlite’s `serialize()` and then writing the result to the exports directory.
+- `POST /admin/export-snapshot` writes
+  `exports/snapshot-YYYYMMDD-HHMMSSmmm.sqlite` using bun:sqlite’s
+  `serialize()` and then writing the result to the exports directory.
 - Service uses exactly one SQLite connection (all ingestion and export go
   through it).
 - Manual copy workflow (scp/copy) is documented in the README.

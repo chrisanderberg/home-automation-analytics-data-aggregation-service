@@ -156,7 +156,7 @@ curl -sS -X POST http://localhost:8787/admin/export-snapshot
 Response:
 
 ```json
-{ "ok": true, "path": "exports/snapshot-YYYYMMDD-HHMMSS.sqlite" }
+{ "ok": true, "path": "exports/snapshot-YYYYMMDD-HHMMSSmmm.sqlite" }
 ```
 
 Then copy it to the analysis machine manually, for example:
