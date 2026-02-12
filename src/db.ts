@@ -12,6 +12,8 @@ export const BLOB_VALUE_BYTES = 8;
 
 export function openDb(sqlitePath: string): Database {
   const db = new Database(sqlitePath);
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA foreign_keys = ON");
   return db;
 }
 
@@ -66,8 +68,14 @@ export function getControl(
     | { control_type: string; num_states: number; state_labels: string | null }
     | undefined;
   if (!row) return null;
-  const stateLabels =
-    row.state_labels === null ? null : (JSON.parse(row.state_labels) as string[]);
+  let stateLabels: string[] | null = null;
+  if (row.state_labels !== null) {
+    try {
+      stateLabels = JSON.parse(row.state_labels) as string[];
+    } catch {
+      throw new IntegrityError("control state_labels malformed JSON");
+    }
+  }
   return {
     controlType: row.control_type,
     numStates: row.num_states,
@@ -96,20 +104,20 @@ export function getOrCreateAggregateRow(
     throw new IntegrityError("num_states mismatch");
   }
   const expectedBytes = blobLength(numStates) * BLOB_VALUE_BYTES;
+  const zeroBlob = new Uint8Array(expectedBytes);
+  db.run(
+    `INSERT INTO aggregates (control_id, model_id, quarter_index, blob)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (control_id, model_id, quarter_index) DO NOTHING`,
+    [controlId, modelId, quarterIndex, zeroBlob]
+  );
+
   const row = db
     .query(
       "SELECT blob FROM aggregates WHERE control_id = ? AND model_id = ? AND quarter_index = ?"
     )
-    .get(controlId, modelId, quarterIndex) as { blob: Uint8Array } | undefined;
-  if (row) {
-    if (row.blob.length !== expectedBytes) {
-      throw new IntegrityError("aggregate blob length mismatch");
-    }
-    return;
+    .get(controlId, modelId, quarterIndex) as { blob: Uint8Array } | null;
+  if (row === null || row.blob.length !== expectedBytes) {
+    throw new IntegrityError("aggregate blob length mismatch");
   }
-  const zeroBlob = new Uint8Array(expectedBytes);
-  db.run(
-    "INSERT INTO aggregates (control_id, model_id, quarter_index, blob) VALUES (?, ?, ?, ?)",
-    [controlId, modelId, quarterIndex, zeroBlob]
-  );
 }

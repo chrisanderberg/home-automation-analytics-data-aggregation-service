@@ -411,13 +411,6 @@ export const UnequalHoursClock: Clock = {
   },
 };
 
-/** Config subset needed for clock context. */
-export interface ClockConfig {
-  timeZone: string;
-  latitudeDeg: number;
-  longitudeDeg: number;
-}
-
 /** Returns all five clocks in canonical order: UTC, Local, Mean solar, Apparent solar, Unequal hours. */
 export function createClocks(): Clock[] {
   return [

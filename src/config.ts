@@ -15,7 +15,8 @@ function parseNum(
   value: string | undefined,
   min: number,
   max: number,
-  defaultValue: number
+  defaultValue: number,
+  requireInteger = false
 ): number {
   if (value === undefined || value === "") return defaultValue;
   const n = Number(value);
@@ -24,7 +25,7 @@ function parseNum(
       `Invalid ${key}: must be a number between ${min} and ${max} (got: ${value})`
     );
   }
-  if (key === "PORT" && !Number.isInteger(n)) {
+  if (requireInteger && !Number.isInteger(n)) {
     throw new Error(
       `Invalid ${key}: must be a number between ${min} and ${max} (got: ${value})`
     );
@@ -71,7 +72,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     longitudeDeg: lon,
     sqlitePath: env.SQLITE_PATH?.trim() || "data.sqlite",
     exportsDir: env.EXPORTS_DIR?.trim() || "exports",
-    port: parseNum("PORT", env.PORT, 1, 65535, 8787),
+    port: parseNum("PORT", env.PORT, 1, 65535, 8787, true),
     maxHoldingIntervalMs: parseNum(
       "MAX_HOLDING_INTERVAL_MS",
       env.MAX_HOLDING_INTERVAL_MS,

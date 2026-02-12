@@ -27,16 +27,16 @@ const putControlBody = z.object({
 });
 
 const postHoldingBody = z.object({
-  modelId: z.string(),
-  controlId: z.string(),
+  modelId: z.string().min(1),
+  controlId: z.string().min(1),
   state: z.number().int().min(0),
   startTimeMs: z.number().int(),
   endTimeMs: z.number().int(),
 });
 
 const postTransitionBody = z.object({
-  modelId: z.string(),
-  controlId: z.string(),
+  modelId: z.string().min(1),
+  controlId: z.string().min(1),
   fromState: z.number().int().min(0),
   toState: z.number().int().min(0),
   timestampMs: z.number().int(),
