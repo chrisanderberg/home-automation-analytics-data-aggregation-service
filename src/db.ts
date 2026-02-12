@@ -94,7 +94,10 @@ export function getControl(
         throw new IntegrityError("control state_labels malformed JSON");
       }
       stateLabels = parsed;
-    } catch {
+    } catch (error) {
+      if (error instanceof IntegrityError) {
+        throw error;
+      }
       throw new IntegrityError("control state_labels malformed JSON");
     }
   }

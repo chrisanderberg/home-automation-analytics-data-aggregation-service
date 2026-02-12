@@ -43,7 +43,7 @@ export async function exportSnapshot(
   } catch (err) {
     processLogger.error({
       event: "export_snapshot_failed",
-      reason: "serialize failed",
+      step: "serialize",
       error:
         err instanceof Error
           ? { name: err.name, message: err.message, stack: err.stack }
@@ -72,7 +72,7 @@ export async function exportSnapshot(
   } catch (err) {
     processLogger.error({
       event: "export_snapshot_failed",
-      reason: "write failed",
+      step: "write",
       path: filePath,
       error:
         err instanceof Error
