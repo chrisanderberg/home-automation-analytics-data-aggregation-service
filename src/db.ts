@@ -28,6 +28,20 @@ export function upsertControl(
   numStates: number,
   stateLabels: string[] | null
 ): void {
+  const existing = db
+    .query("SELECT num_states FROM controls WHERE control_id = ?")
+    .get(controlId) as { num_states: number } | null;
+  if (existing !== null && existing.num_states !== numStates) {
+    const aggregateExists = db
+      .query("SELECT 1 AS present FROM aggregates WHERE control_id = ? LIMIT 1")
+      .get(controlId) as { present: number } | null;
+    if (aggregateExists !== null) {
+      throw new IntegrityError(
+        "cannot change num_states for control with existing aggregates"
+      );
+    }
+  }
+
   const labelsJson = stateLabels === null ? null : JSON.stringify(stateLabels);
   db.run(
     `INSERT INTO controls (control_id, control_type, num_states, state_labels)

@@ -85,13 +85,16 @@ function splitIntervalGeneric(
   while (current < endTimeMs) {
     const bucketIndex = bucketAt(current);
     const bucketEnd = bucketEndMs(current);
+    if (bucketEnd < current) {
+      throw new Error("bucketEndMs returned time before current");
+    }
     const sliceEndMs = Math.min(endTimeMs, bucketEnd);
     slices.push({
       bucketIndex,
       startTimeMs: current,
       endTimeMs: sliceEndMs,
     });
-    current = sliceEndMs;
+    current = Math.max(sliceEndMs, current + 1);
   }
   return slices;
 }
@@ -241,8 +244,7 @@ function apparentSolarBucketAt(
   const dayStart = new Date(noonMs);
   dayStart.setUTCHours(0, 0, 0, 0);
   const dayStartMs = dayStart.getTime();
-  const apparentMsInDay = (ms - noonMs + DAY_MS) % DAY_MS;
-  if (apparentMsInDay < 0) throw new Error("unexpected negative");
+  const apparentMsInDay = ((ms - noonMs) % DAY_MS + DAY_MS) % DAY_MS;
   const d = new Date(dayStartMs + apparentMsInDay);
   const dayIndex = utcDayIndex(d.getTime());
   const hour = d.getUTCHours();

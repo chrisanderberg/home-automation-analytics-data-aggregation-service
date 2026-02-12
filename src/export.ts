@@ -9,6 +9,12 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
+const processLogger = {
+  error(payload: unknown): void {
+    console.error(JSON.stringify(payload));
+  },
+};
+
 export async function exportSnapshot(
   db: Database,
   exportsDir: string,
@@ -30,31 +36,38 @@ export async function exportSnapshot(
   try {
     serialized = db.serialize();
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      JSON.stringify({
+    processLogger.error({
         event: "export_snapshot_failed",
         reason: "serialize failed",
-        error: message,
-      })
-    );
+        error: err instanceof Error ? err.message : String(err),
+      });
     throw err;
   }
 
-  await mkdir(exportsDir, { recursive: true });
+  try {
+    await mkdir(exportsDir, { recursive: true });
+  } catch (err) {
+    processLogger.error({
+      event: "export_snapshot_failed",
+      step: "mkdir",
+      exportsDir,
+      error:
+        err instanceof Error
+          ? { name: err.name, message: err.message, stack: err.stack }
+          : { raw: String(err) },
+    });
+    throw err;
+  }
 
   try {
     await Bun.write(filePath, serialized);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      JSON.stringify({
+    processLogger.error({
         event: "export_snapshot_failed",
         reason: "write failed",
         path: filePath,
-        error: message,
-      })
-    );
+        error: err instanceof Error ? err.message : String(err),
+      });
     throw err;
   }
 

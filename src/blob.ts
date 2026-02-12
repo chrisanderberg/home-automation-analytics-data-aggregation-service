@@ -50,8 +50,13 @@ export async function withImmediateTransaction<T>(
     }
     return result;
   } catch (e) {
-    db.run("ROLLBACK");
-    throw e;
+    const originalErr = e;
+    try {
+      db.run("ROLLBACK");
+    } catch (_) {
+      /* ignore rollback error; caller sees original failure */
+    }
+    throw originalErr;
   }
 }
 
