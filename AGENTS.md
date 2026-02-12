@@ -82,8 +82,10 @@ From `docs/spec.md` and `docs/plan.md`:
 ## Snapshot/export
 
 - Export creates a consistent SQLite snapshot file in `exports/` (gitignored).
-- Use `node:sqlite` online backup (`backup()`); service uses exactly one SQLite
-  connection so snapshots can be taken while ingesting.
+- Use `bun:sqlite` `Database.serialize()` to produce a consistent snapshot byte
+  image, then write it to a file in `exports/` (see `src/export.ts`).
+- Service uses exactly one SQLite connection so snapshots can be taken while
+  ingesting.
 - Initial workflow is manual copy/SCP; do not build network transfer features.
 
 ## Testing requirements

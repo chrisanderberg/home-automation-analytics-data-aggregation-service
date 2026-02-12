@@ -15,9 +15,9 @@ describe("exportSnapshot", () => {
 
       const exportsDir = mkdtempSync(join(tmpdir(), "export-test-"));
       try {
-        const path = await exportSnapshot(db, exportsDir);
+        const path = await exportSnapshot(db, exportsDir, () => "testid01");
         expect(path).toContain("snapshot-");
-        expect(path).toMatch(/snapshot-\d{8}-\d{9}\.sqlite$/);
+        expect(path).toMatch(/snapshot-\d{8}-\d{9}-testid01\.sqlite$/);
 
         const snapshotDb = openDb(path);
         try {

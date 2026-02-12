@@ -5,12 +5,14 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 export async function exportSnapshot(
   db: Database,
-  exportsDir: string
+  exportsDir: string,
+  uniqueSuffixFactory: () => string = () => randomUUID().slice(0, 8)
 ): Promise<string> {
   const now = new Date();
   const y = now.getUTCFullYear();
@@ -20,7 +22,8 @@ export async function exportSnapshot(
   const min = String(now.getUTCMinutes()).padStart(2, "0");
   const s = String(now.getUTCSeconds()).padStart(2, "0");
   const ms = String(now.getUTCMilliseconds()).padStart(3, "0");
-  const filename = `snapshot-${y}${m}${d}-${h}${min}${s}${ms}.sqlite`;
+  const suffix = uniqueSuffixFactory();
+  const filename = `snapshot-${y}${m}${d}-${h}${min}${s}${ms}-${suffix}.sqlite`;
   const filePath = join(exportsDir, filename);
 
   let serialized: Uint8Array;
